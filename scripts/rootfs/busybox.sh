@@ -9,7 +9,7 @@ BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Default values
-BUSYBOX_REPO_URL="${BUSYBOX_REPO_URL:-git://busybox.net/busybox.git}"
+BUSYBOX_REPO_URL="${BUSYBOX_REPO_URL:-https://github.com/mirror/busybox.git}"
 BUSYBOX_SRC_DIR="${BUSYBOX_SRC_DIR:-${BUILD_DIR}/busybox}"
 BUSYBOX_PATCH_DIR="${BUSYBOX_PATCH_DIR:-${ROOT_DIR}/patches/busybox}"
 
@@ -23,7 +23,7 @@ mkfs_usage() {
     printf 'Generate a filesystem image containing BusyBox and basic device nodes\n'
     printf '\n'
     printf 'Usage:\n'
-    printf '  scripts/mkfs.sh <command> [options]\n'
+    printf '  scripts/rootfs/busybox.sh <command> [options]\n'
     printf '\n'
     printf '<command>:\n'
     printf '  aarch64                       Build minimal filesystem for aarch64\n'
@@ -32,7 +32,7 @@ mkfs_usage() {
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
-    printf '  --out_dir <dir>               Output directory (default: IMAGES/qemu/linux/<arch>)\n'
+    printf '  --out_dir <dir>               Output directory (default: IMAGES/rootfs)\n'
     printf '  --guest <dir>                 Guest directory to copy into rootfs /guest\n'
     printf '\n'
     printf 'Environment Variables:\n'
@@ -45,9 +45,9 @@ mkfs_usage() {
     printf '  * The init script drops to an interactive shell after mounting basic pseudo filesystems.\n'
     printf '\n'
     printf 'Examples:\n'
-    printf '  scripts/mkfs.sh aarch64\n'
-    printf '  scripts/mkfs.sh riscv64 --out_dir /tmp/output\n'
-    printf '  scripts/mkfs.sh aarch64 --guest /path/to/guest/files\n'
+    printf '  scripts/rootfs/busybox.sh aarch64\n'
+    printf '  scripts/rootfs/busybox.sh riscv64 --out_dir /tmp/output\n'
+    printf '  scripts/rootfs/busybox.sh aarch64 --guest /path/to/guest/files\n'
 }
 
 mkfs_parse_args() {
@@ -86,6 +86,9 @@ mkfs_build_busybox() {
     info "Building: make -j$(nproc) CROSS_COMPILE=$cross"
     sed -i 's/^# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
     sed -i 's/^CONFIG_TC=y$/# CONFIG_TC is not set/' .config
+    # BusyBox defconfig may enable x86 SHA-NI acceleration, which breaks
+    # non-x86 cross builds because the matching assembly implementation is not used.
+    sed -i 's/^CONFIG_SHA1_HWACCEL=y$/# CONFIG_SHA1_HWACCEL is not set/' .config
     make -j$(nproc) CROSS_COMPILE="$cross"
     popd >/dev/null
 }
@@ -133,7 +136,7 @@ mkfs_create_init() {
 
 mkfs_pack_fs() {
     # 0. Prepare working directory
-    OUTPUT_DIR="${MKFS_OUT_DIR:-${ROOT_DIR}/IMAGES/qemu/linux/${MKFS_ARCH}}"
+    OUTPUT_DIR="${MKFS_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
     mkdir -p "$OUTPUT_DIR"
     
     # Convert guest directory to absolute path before changing directory
@@ -202,7 +205,7 @@ mkfs_pack_fs() {
     [[ -e bin/init ]] || ln -s ../init bin/init
 
     # 5. Pack ramfs
-    local abs_out="$OUTPUT_DIR/initramfs.cpio.gz"
+    local abs_out="$OUTPUT_DIR/busybox-initramfs-${MKFS_ARCH}.cpio.gz"
     echo "Packing ramfs -> $abs_out"
     chmod 755 . || true
     find . -print0 | sort -z 2>/dev/null | cpio --null -H newc -o 2>/dev/null | gzip -9 > "$abs_out"
@@ -210,7 +213,7 @@ mkfs_pack_fs() {
     du -h "$abs_out" | awk '{print "Size: "$1}'
 
     # 6. Pack ext4 rootfs.img
-    local img_out="$OUTPUT_DIR/rootfs.img"
+    local img_out="$OUTPUT_DIR/busybox-rootfs-${MKFS_ARCH}.img"
     local size_mb=32
     echo "Packing ext4 rootfs (debugfs write) -> $img_out"
     dd if=/dev/zero of="$img_out" bs=1M count=$size_mb status=none

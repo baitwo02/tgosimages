@@ -51,7 +51,7 @@ usage() {
 }
 
 build_rootfs() {
-    local rootfs_script="${SCRIPT_DIR}/../rootfs/mkfs.sh"
+    local rootfs_script="${SCRIPT_DIR}/../rootfs/busybox.sh"
     if [ ! -f "${rootfs_script}" ]; then
         die "Root filesystem script does not exist: ${rootfs_script}"
     fi
@@ -111,7 +111,7 @@ build_linux() {
             cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/qemu-${ARCH}"
             
             FS_IMAGES_DIR=${LINUX_IMAGES_DIR}
-            info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/mkfs.sh -> ${FS_IMAGES_DIR}"
+            info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/busybox.sh -> ${FS_IMAGES_DIR}"
             build_rootfs
         fi
     else
@@ -158,7 +158,7 @@ arceos() {
     
     if [[ "$@" != *"clean"* ]]; then
         FS_IMAGES_DIR=${ARCEOS_IMAGES_DIR}
-        info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/mkfs.sh -> ${FS_IMAGES_DIR}"
+        info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/busybox.sh -> ${FS_IMAGES_DIR}"
         build_rootfs
     fi
 }

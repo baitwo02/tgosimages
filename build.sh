@@ -12,7 +12,7 @@ PLATFORMS=(phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100
 QEMU_TARGETS=(qemu-aarch64 qemu-x86_64 qemu-riscv64)
 ALL_PLATFORM_TARGETS=("${PLATFORMS[@]}" "${QEMU_TARGETS[@]}")
 COMMON_OS_TARGETS=(arceos zephyr freertos rtthread nimbos)
-ROOTFS_TARGETS=(mkfs alpine)
+ROOTFS_TARGETS=(busybox alpine)
 
 usage() {
     printf '%s\n' "Usage:"
@@ -44,16 +44,16 @@ usage() {
     printf '%s\n' "    nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' ""
     printf '%s\n' "Rootfs targets:"
-    printf '%s\n' "    mkfs                 -> scripts/rootfs/mkfs.sh"
-    printf '%s\n' "    alpine               -> scripts/rootfs/alpine/alpine.sh"
+    printf '%s\n' "    busybox              -> scripts/rootfs/busybox.sh"
+    printf '%s\n' "    alpine               -> scripts/rootfs/alpine.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
     printf '%s\n' "  $0 os phytiumpi"
     printf '%s\n' "  $0 os qemu-aarch64 linux"
     printf '%s\n' "  $0 os qemu riscv64 all"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
-    printf '%s\n' "  $0 rootfs mkfs aarch64 --out_dir IMAGES/qemu/linux/aarch64"
-    printf '%s\n' "  $0 rootfs alpine all"
+    printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/qemu/linux/aarch64"
+    printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/qemu/linux/aarch64"
     printf '%s\n' "  $0 release pack"
     printf '%s\n' ""
     printf '%s\n' "Legacy compatibility:"
@@ -152,20 +152,17 @@ run_rootfs_target() {
     shift || true
 
     case "$target" in
-        mkfs)
-            local script_path="${ROOTFS_DIR}/mkfs.sh"
+        busybox)
+            local script_path="${ROOTFS_DIR}/busybox.sh"
             ensure_script "$script_path"
-            [[ $# -gt 0 ]] || { echo "[ERROR] mkfs requires an architecture argument" >&2; exit 2; }
+            [[ $# -gt 0 ]] || { echo "[ERROR] busybox requires an architecture argument" >&2; exit 2; }
             echo "Running: $script_path $*"
             exec "$script_path" "$@"
             ;;
         alpine)
-            local script_path="${ROOTFS_DIR}/alpine/alpine.sh"
+            local script_path="${ROOTFS_DIR}/alpine.sh"
             ensure_script "$script_path"
-            if [[ $# -eq 0 ]]; then
-                echo "Running: $script_path all"
-                exec "$script_path" all
-            fi
+            [[ $# -gt 0 ]] || { echo "[ERROR] alpine requires an architecture argument" >&2; exit 2; }
             echo "Running: $script_path $*"
             exec "$script_path" "$@"
             ;;
@@ -225,7 +222,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         arceos|zephyr|freertos|rtthread|nimbos)
             run_common_os_target "$cmd" "$@"
             ;;
-        mkfs|alpine)
+        busybox|alpine)
             run_rootfs_target "$cmd" "$@"
             ;;
         *)

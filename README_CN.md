@@ -1,41 +1,119 @@
-# AxVisor 客户机固件仓库
+# TGOS Images 仓库
 
 [English](README.md) | 中文
 
 ## 简介
 
-本仓库集中收录 AxVisor 虚拟化管理程序支持的 Linux 与 ArceOS 客户机镜像，以及生成这些镜像的全部脚本和补丁。仓库提供从源码克隆、配置下发到产物归档的完整流水线，涵盖本地构建、远程 SDK 触发与 GitHub Release 发布：
+本仓库包含 TGOS 相关镜像的构建脚本、补丁与辅助工具，覆盖以下内容：
 
-- `scripts/` 目录下的脚本自动化完成各开发板的 Linux 与 ArceOS 镜像编译、补丁应用与产物收集；
-- `build.sh` 提供单入口的批量构建和清理能力；
-- `scripts/tools/release.sh` 支持将镜像一键打包并推送到 GitHub Release；
-- `http_server.py` 可为本地镜像目录启动轻量的 HTTP 分发服务，方便团队内部共享与 CI 下载。 
+- 面向具体平台的 Linux 与 ArceOS 构建流程
+- `scripts/os/` 下的通用 OS 构建器
+- `scripts/rootfs/` 下的根文件系统生成器
+- 打包与发布辅助脚本
+- 使用 `http_server.py` 进行本地镜像分发
 
-## 开发板支持
+仓库目前已经按职责对 `scripts/` 重新分层，不再是所有脚本都平铺在同一级目录下。
 
-下表列出了目前维护的硬件开发板和 QEMU 虚拟机目标，可直接对照脚本名称和输出目录定位镜像。每个平台的脚本都会准备交叉编译器、回放内置补丁并下载依赖源码，生成 Linux 与 ArceOS 两类镜像供测试和发版使用。
+## 仓库结构
 
-| 平台 | 目标架构 | Linux 构建方式 | ArceOS 配置 | 输出目录 |
-| --- | --- | --- | --- | --- |
-| Phytium Pi 开发板 | aarch64 | 直接克隆官方 [Phytium Pi OS](https://gitee.com/phytium_embedded/phytium-pi-os) 源码来构建 | 直接克隆 https://github.com/arceos-hypervisor/arceos 来构建 | `IMAGES/phytiumpi/linux`、`IMAGES/phytiumpi/arceos` |
-| ROC-RK3588-PC 开发板 | aarch64 | 通过内网 `10.3.10.194` 服务器的特定目录下 SDK 源码构建 | 同上 | `IMAGES/roc-rk3588-pc/linux`、`IMAGES/roc-rk3588-pc/arceos` |
-| EVM3588 开发板 | aarch64 | 通过内网 `10.3.10.194` 服务器的特定目录下 SDK 源码构建 | 同上 | `IMAGES/evm3588/linux`、`IMAGES/evm3588/arceos` |
-| TAC-E400-PLC 工业控制器 | aarch64 | 拉取 `tac-e400-plc` 私有仓库后构建 | 同上 | `IMAGES/tac-e400-plc/linux`、`IMAGES/tac-e400-plc/arceos` |
-| QEMU 虚拟机 | aarch64 / riscv64 / x86_64 | 克隆主线 Linux 并交叉编译，配合 `scripts/mkfs.sh` 生成根文件系统 | 同上 | `IMAGES/qemu/linux/<arch>`、`IMAGES/qemu/arceos/<arch>` |
-| 香橙派 5 Plus | aarch64 | 直接克隆 [orangepi-build](https://github.com/orangepi-xunlong/orangepi-build) 源码来构建 | 同上 | `IMAGES/orangepi/linux`、`IMAGES/orangepi/arceos` |
-| 黑芝麻 A1000 域控制器 | aarch64 | 拉取 `bst-a1000` 私有仓库后构建 | 同上 | `IMAGES/orangepi/linux`、`IMAGES/orangepi/arceos` |
+| 路径 | 说明 |
+| --- | --- |
+| `build.sh` | OS、rootfs、release 的统一入口 |
+| `run.sh` | QEMU Linux 镜像的快速启动辅助脚本 |
+| `scripts/platform/` | 各平台入口脚本，如 Phytium Pi、QEMU、Orange Pi 等 |
+| `scripts/os/` | 通用 OS 构建器，如 ArceOS、Zephyr、FreeRTOS、RT-Thread、NimbOS |
+| `scripts/rootfs/` | BusyBox、Alpine、Debian 根文件系统生成脚本 |
+| `scripts/tools/` | 打包、发布及其他辅助工具 |
+| `scripts/lib/` | 共享 shell 工具函数 |
+| `patches/` | 构建过程中应用到上游项目的补丁 |
+| `IMAGES/` | 最终构建产物 |
+| `build/` | 下载缓存、源码目录和临时构建输出 |
+| `release/` | 打包脚本生成的归档文件 |
 
-## 构建
+## 脚本分类
 
-构建流程由 `build.sh` 与 `scripts/*.sh` 协同完成：前者负责统一入口，后者覆盖各平台的具体命令。执行全量任务前，请确认已有镜像是否需要备份，避免 `clean` 阶段删除仍在使用的文件。
+### 平台脚本
 
-1. 脚本会按需克隆源代码与应用补丁，请确保具备相应仓库访问权限以及（对需要远程构建的开发板）可访问内网构建机
-2. 对于某些开发板 SDK，会应用 `patches` 中的各种补丁
-3. 部分 SDK 在构建时要求管理员权限，需要手动输入或者配置为免输入密码
+这类脚本是面向具体平台的主入口，通常负责拉取源码、打补丁、调用厂商或上游构建系统，并将产物复制到 `IMAGES/`。
 
-### 环境准备
+| 脚本 | 主要职责 |
+| --- | --- |
+| `scripts/platform/phytiumpi.sh` | 构建 Phytium Pi 客户机镜像 |
+| `scripts/platform/roc-rk3568-pc.sh` | 构建 ROC-RK3568-PC 客户机镜像 |
+| `scripts/platform/evm3588.sh` | 构建 EVM3588 客户机镜像 |
+| `scripts/platform/tac-e400-plc.sh` | 构建 TAC-E400-PLC 客户机镜像 |
+| `scripts/platform/orangepi-5-plus.sh` | 构建 Orange Pi 5 Plus 客户机镜像 |
+| `scripts/platform/rdk-s100p.sh` | 构建 RDK-S100P 客户机镜像 |
+| `scripts/platform/bst-a1000.sh` | 构建 BST-A1000 客户机镜像 |
+| `scripts/platform/qemu.sh` | 构建 QEMU 客户机镜像，并在需要时串联 rootfs 生成流程 |
 
-执行构建前请保证宿主机剩余磁盘空间不少于 30GB，并能稳定访问各厂商的源码仓库或内网 SDK 服务。建议在 Ubuntu 24.04 或兼容发行版上执行以下命令，安装交叉编译器、内核工具链以及根文件系统生成必需的软件包：
+### 通用 OS 构建器
+
+这类脚本提供可复用的 OS 构建流程，可被平台脚本调用，也可以直接单独执行。
+
+| 脚本 | 主要职责 |
+| --- | --- |
+| `scripts/os/arceos.sh` | 通用 ArceOS 构建器 |
+| `scripts/os/zephyr.sh` | 通用 Zephyr 构建器 |
+| `scripts/os/freertos.sh` | 通用 FreeRTOS 构建器 |
+| `scripts/os/rtthread.sh` | 通用 RT-Thread 构建器 |
+| `scripts/os/nimbos.sh` | 通用 NimbOS 构建器，并包含自身的 rootfs 生成流程 |
+
+### Rootfs 生成脚本
+
+这类脚本负责生成文件系统内容或根文件系统镜像。
+
+| 脚本 | 主要职责 | 典型产物 |
+| --- | --- | --- |
+| `scripts/rootfs/busybox.sh` | 基于 BusyBox 生成最小 rootfs | `busybox-initramfs-<arch>.cpio.gz`、`busybox-rootfs-<arch>.img` |
+| `scripts/rootfs/alpine.sh` | 下载 Alpine minirootfs 并生成 ext4 镜像 | `alpine-rootfs-<arch>.img` |
+| `scripts/rootfs/debian.sh` | 基于 Docker + debootstrap 生成 Debian rootfs 镜像 | `debian-rootfs-<arch>.img` |
+
+## 支持的目标
+
+### 平台 OS 目标
+
+`build.sh os <target>` 当前支持以下平台目标：
+
+- `phytiumpi`
+- `roc-rk3568-pc`
+- `evm3588`
+- `tac-e400-plc`
+- `orangepi-5-plus`
+- `rdk-s100p`
+- `bst-a1000`
+- `qemu-aarch64`
+- `qemu-riscv64`
+- `qemu-x86_64`
+
+其中 QEMU 底层调用的是 `scripts/platform/qemu.sh`，当前支持：
+
+- `aarch64`
+- `riscv64`
+- `x86_64`
+
+### Rootfs 目标
+
+`build.sh rootfs <target>` 当前支持：
+
+- `busybox`
+- `alpine`
+
+`scripts/rootfs/debian.sh` 目前作为独立脚本提供，支持：
+
+- `aarch64`
+- `riscv64`
+- `x86_64`
+- `loongarch64`
+
+说明：
+`loongarch64` 已经作为 Debian 脚本目标存在，但 Debian `trixie` 主仓库当前并不提供 `loong64` 包，因此该架构建议使用 `sid` / `unstable` 等更合适的 suite。
+
+## 构建环境准备
+
+执行构建前，请确保宿主机具备足够磁盘空间、可访问所需源码仓库或内网 SDK 服务，并安装相应工具链。
+
+在 Ubuntu 24.04 或相近发行版上，可先安装一组实用的基础依赖：
 
 ```bash
 sudo apt update
@@ -45,165 +123,166 @@ sudo apt install \
   gcc-riscv64-linux-gnu g++-riscv64-linux-gnu \
   bc fakeroot coreutils cpio gzip rsync file \
   debootstrap binfmt-support debian-archive-keyring eatmydata \
+  e2fsprogs docker.io \
   python3 python3-venv curl git openssh-client libmpc-dev libgmp-dev \
-  lz4 chrpath gawk texinfo chrpath diffstat expect cmake
+  lz4 chrpath gawk texinfo diffstat expect cmake
 ```
 
-若在容器或 CI 中运行脚本，需提前准备好代理、APT 缓存和 SSH 凭据，否则克隆和远程构建步骤会失败。为方便执行，建议赋予各个脚本执行权限：
+部分平台还需要：
+
+- 访问私有仓库
+- 访问内网 SDK 主机 `10.3.10.194`
+- 安装厂商 SDK 依赖
+- 具备管理员权限或免密 sudo
+
+## 快速开始
+
+### 统一入口
+
+`build.sh` 是推荐的统一入口。
 
 ```bash
-chmod +x build.sh scripts/*.sh
+./build.sh help
+
+# 平台 OS 构建
+./build.sh os phytiumpi
+./build.sh os qemu-aarch64 linux
+./build.sh os qemu riscv64 all
+
+# rootfs 构建
+./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs
+./build.sh rootfs alpine riscv64 --out_dir IMAGES/rootfs/alpine-riscv64.img
+
+# 打包
+./build.sh release pack
 ```
 
-### `build.sh`
-
-直接执行 `build.sh` 相关子命令将克隆源码、回放补丁、调用平台脚本执行构建，并最终收集构建镜像打。脚本会自动判断是否需要先生成根文件系统或更新外部仓库，避免重复执行相同的步骤。
+旧兼容入口仍可使用：
 
 ```bash
-./build.sh help                # 查看所有可用命令
-./build.sh all                 # 依次构建所有平台（耗时较长）
-./build.sh phytiumpi           # 构建飞腾派 Linux + ArceOS
-./build.sh roc-rk3568-pc linux # 仅构建 ROC-RK3588-PC Linux 内核及镜像
-./build.sh qemu-aarch64 all    # 生成 QEMU aarch64 的 Linux+ArceOS+根文件系统
-./build.sh clean               # 清理各平台的构建缓存与镜像
+./build.sh phytiumpi
+./build.sh qemu-aarch64 linux
+./build.sh all
+./build.sh clean
 ```
 
-在构建时产生的下载缓存、编译日志和中间包位于 `build/` 目录中，最终结果会统一复制到 `IMAGES/` 目录中，打包结果位于 `release/` 目录中。
+### 直接执行脚本
 
-### 平台脚本
-
-如需单独调试某个平台，可直接执行对应的 `scripts/<board>.sh` 获取更细粒度的命令。大部分脚本提供 `help` 子命令，你可以查询 Linux、ArceOS、rootfs 等子任务的参数，方便集成到 CI：
+如果需要更细粒度的控制，可以直接调用平台脚本：
 
 ```bash
-scripts/phytiumpi.sh all              # Linux + ArceOS
-scripts/phytiumpi.sh linux            # 仅 Linux
-scripts/phytiumpi.sh clean            # 清理产物
-
-scripts/qemu.sh aarch64 linux         # QEMU aarch64 Linux
-scripts/qemu.sh riscv64 all           # riscv64 Linux + ArceOS + 根文件系统
-scripts/qemu.sh x86_64 clean          # 清理 QEMU x86_64 产物
-
-scripts/tac-e400-plc.sh all           # TAC-E400-PLC 全量构建
-scripts/evm3588.sh arceos             # 仅 ArceOS 固件
+scripts/platform/phytiumpi.sh all
+scripts/platform/qemu.sh aarch64 linux
+scripts/platform/qemu.sh riscv64 all
+scripts/platform/evm3588.sh arceos
 ```
 
-对于 `evm3588.sh` 与 `roc-rk3568-pc.sh` 会通过 SSH 登录 `10.3.10.194`，执行厂商提供的 SDK 构建脚本并下载产物。建议为该流程准备只读权限的专用账号和 SSH key，必要时通过跳板机限制访问源。
-
-若只需生成最小根文件系统，可单独执行 `scripts/mkfs.sh` 产出 `initramfs.cpio.gz` 和 `rootfs.img`（QEMU 流程会自动调用该脚本）。脚本支持 `--out_dir`、`--guest` 等参数，可按需自定义输出目录或添加额外的 guest 文件：
+如果只需要 rootfs，可直接调用 rootfs 脚本：
 
 ```bash
-scripts/mkfs.sh aarch64 --out_dir IMAGES/qemu/linux/aarch64
-scripts/mkfs.sh aarch64 --guest /path/to/guest/files
+scripts/rootfs/busybox.sh aarch64 --out_dir IMAGES/rootfs
+scripts/rootfs/alpine.sh x86_64 --img-size 2G
+scripts/rootfs/debian.sh riscv64 --debian trixie --out_dir IMAGES/rootfs
+scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 ```
 
-## 镜像
+## Rootfs 说明
 
-所有构建产物会统一放到 `IMAGES/<platform>/<os>` 目录中，其中 `<os>` 取值为 `linux` 或 `arceos`。目录命名与脚本输出保持一致，便于 `scripts/tools/release.sh`、`http_server.py` 以及外部自动化流程直接复用：
+### BusyBox
 
-| 输出目录 | 内容说明 | 典型文件 / 命名规则 |
-| --- | --- | --- |
-| `phytiumpi/linux` | 飞腾派 Linux SDK 产物 | `Image`、`fitImage`、`fip-all.bin`、`phytiumpi_firefly.dtb` 等 |
-| `phytiumpi/arceos` | 飞腾派 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `roc-rk3588-pc/linux` | Firefly SDK 生成的镜像 | `boot.img`、`MiniLoaderAll.bin`、`parameter.txt`、`rk3568-firefly-roc-pc-se.dtb`、`Image` |
-| `roc-rk3588-pc/arceos` | 对应 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `evm3588/linux` | EVM3588 SDK 生成的镜像 | `boot.img`、`MiniLoaderAll.bin`、`parameter.txt`、`evm3588.dtb`、`Image` |
-| `evm3588/arceos` | 对应 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `tac-e400-plc/linux` | PLC Linux 内核与设备树 | `Image`、`e2000q-hanwei-board.dtb` |
-| `tac-e400-plc/arceos` | 对应 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `qemu/linux/aarch64` | QEMU aarch64 内核与根文件系统 | `Image`、`initramfs.cpio.gz`、`rootfs.img` |
-| `qemu/linux/riscv64` | QEMU riscv64 内核与根文件系统 | `Image`、`initramfs.cpio.gz`、`rootfs.img` |
-| `qemu/linux/x86_64` | QEMU x86_64 内核与根文件系统 | `bzImage`、`initramfs.cpio.gz`、`rootfs.img` |
-| `qemu/arceos/aarch64` | QEMU aarch64 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `qemu/arceos/riscv64` | QEMU riscv64 ArceOS 固件 | `arceos-riscv64-dyn-smp1.bin` |
-| `qemu/arceos/x86_64` | QEMU x86_64 ArceOS 固件 | `arceos-x86_64-dyn-smp1.bin` |
-| `orangepi/linux` | Orange Pi 5 Plus 厂商 SDK 或本地构建 | `boot.img`、`parameter.txt`、`u-boot.img`、`orangepi5-plus.dtb`、`Image` |
-| `orangepi/arceos` | 对应 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
-| `bst-a1000/linux` | 黑芝麻 A1000 域控制 Linux 源码构建 |  `Image`、`bsta1000b-fada.dtb`、`bsta1000b-fadb.dtb` |
-| `bst-a1000/arceos` | 对应 ArceOS 固件 | `arceos-aarch64-dyn-smp1.bin` |
+- 同时生成 initramfs 和 ext4 rootfs 镜像
+- 被 `scripts/platform/qemu.sh` 用于 QEMU 的 Linux / ArceOS 流程
+- 当前支持 `aarch64`、`riscv64`、`x86_64`
 
-1. 对于 QEMU 镜像，可执行 `run.sh` 来进行快速验证，脚本会选择对应的 QEMU 架构、内核和 rootfs 参数启动虚拟机：
+### Alpine
 
-  ```bash
-  ./run.sh aarch64 ramfs   # 使用 initramfs 启动 QEMU AArch64
-  ./run.sh riscv64 rootfs  # 使用 ext4 rootfs 启动 QEMU RISC-V
-  ```
-2. `IMAGES` 目录中实际仅仅包含了 SDK 生成的镜像的部分镜像
+- 下载 Alpine 官方 `minirootfs`
+- 使用 SHA256 校验下载文件
+- 生成 ext4 rootfs 镜像
+- 当前支持 `aarch64`、`riscv64`、`x86_64`
 
-### 打包与发布
+### Debian
 
-当镜像构建完毕后，可通过打包与发布脚本将产物整理为 tarball，并根据标签上传到远端仓库。`scripts/tools/release.sh` 会读取 `IMAGES/` 下的目录生成归档文件，随后可与 GitHub Release 或内网 HTTP 服务配套使用。
+- 基于 Docker + `debootstrap`
+- 生成 ext4 rootfs 镜像
+- 默认 suite 为 `trixie`
+- 支持 `aarch64`、`riscv64`、`x86_64`、`loongarch64`
 
-#### 打包镜像
+## 输出目录
 
-打包流程会遍历 `IMAGES/` 下的每个平台目录，为 linux 与 arceos 产物各生成一个压缩包并存放在 `release/`。如需剔除调试镜像，可通过 `--include` 或 `--exclude` 过滤目录，降低上传体积：
+构建产物统一收集到 `IMAGES/`。常见位置如下：
+
+| 路径 | 内容 |
+| --- | --- |
+| `IMAGES/qemu/linux/<arch>` | QEMU Linux 内核及配套 rootfs 产物 |
+| `IMAGES/qemu/arceos/<arch>` | QEMU ArceOS 二进制 |
+| `IMAGES/rootfs` | 直接由 rootfs 脚本生成的独立镜像 |
+| `IMAGES/<platform>/linux` | 某硬件平台的 Linux 产物 |
+| `IMAGES/<platform>/arceos` | 某硬件平台的 ArceOS 产物 |
+
+QEMU Linux 的典型文件包括：
+
+- `Image`，用于 `aarch64` / `riscv64`
+- `bzImage`，用于 `x86_64`
+- BusyBox 产物，如 `busybox-initramfs-<arch>.cpio.gz`、`busybox-rootfs-<arch>.img`
+
+## QEMU 快速验证
+
+可以用 `run.sh` 快速启动本地 QEMU 进行验证：
+
+```bash
+./run.sh aarch64 ramfs
+./run.sh riscv64 rootfs
+./run.sh x86_64 rootfs
+```
+
+`run.sh` 约定内核与 rootfs 位于 `IMAGES/qemu/linux/<arch>/`。
+
+## 打包与发布
+
+### 打包产物
 
 ```bash
 ./build.sh release pack
-# 或使用底层脚本：
+
+# 或直接调用脚本
 scripts/tools/release.sh pack --in_dir IMAGES --out_dir release
 ```
 
-#### Github Release
-
-执行 GitHub 发布前需设置 `GITHUB_TOKEN` 并确认当前仓库具备 Release 写权限。脚本会根据指定 Tag 创建或更新 Release，并把 `release/` 中的压缩包依次上传：
+### 发布到 GitHub Release
 
 ```bash
 scripts/tools/release.sh github \
-    --token <GITHUB_TOKEN> \
-    --repo arceos-hypervisor/axvisor-guest \
-    --tag v0.0.10 \
-    --dir release
+  --token <GITHUB_TOKEN> \
+  --repo arceos-hypervisor/axvisor-guest \
+  --tag v0.0.10 \
+  --dir release
 ```
 
-仓库也提供了 `.github/workflows/releases.yml`，当提交代码中打 Tag 时或在 Github 网页上手动执行 `workflow_dispatch` 时执行相关构建并自动发布到 Release 页面。
+## 本地分发
 
-### 本地分发
-
-`http_server.py` 可在后台以守护进程方式托管 `IMAGES/` 目录，通过 HTTP 提供镜像下载。脚本仅依赖 Python 标准库，额外支持日志输出、健康检查和 PID 文件，适用于开发机或 CI 节点的临时分发：
-
-#### 启动与管理
+`http_server.py` 基于 Python 标准库从 `IMAGES/` 提供 HTTP 文件服务。
 
 ```bash
-# 在默认 8000 端口、服务 IMAGES 目录
 python3 http_server.py start
-
-# 自定义端口与目录
-python3 http_server.py start --dir IMAGES --port 9000 --bind 127.0.0.1
-
-# 查看状态 / 健康检查
-python3 http_server.py status --port 9000
-
-# 重启或停止
-python3 http_server.py restart --port 9000
-python3 http_server.py stop --port 9000
+python3 http_server.py status
+python3 http_server.py restart -p 9000 -b 127.0.0.1
+python3 http_server.py stop
 ```
 
-启动时会在 `IMAGES/.images_http.pid` 写入进程号，`status`、`restart`、`stop` 都基于此定位服务；如果端口被占用，可通过 `--bind` 指定新地址。常用环境变量与参数：
-
-- `SERVE_DIR`：覆盖默认服务目录（默认为仓库根目录下的 `IMAGES`）。
-- `--log-file`：指定日志文件（默认写入 `IMAGES/.images_http.log`）。
-- `--timeout`：健康检查超时时间，默认 3 秒。
-
-#### 客户端示例
-
-服务启动后会开放目录索引，可直接浏览镜像文件并下载，便于在测试机上快速拉取所需版本。部署在共享网络时，可以结合 Nginx Basic Auth 或防火墙白名单限制访问范围。
-
-```bash
-# 下载 QEMU aarch64 的内核镜像
-wget http://127.0.0.1:9000/qemu/linux/aarch64/Image
-
-# 下载 Phytium ArceOS 固件
-curl -O http://127.0.0.1:9000/phytiumpi/arceos/arceos-aarch64-dyn-smp1.bin
-``` 
+如果需要在共享网络中暴露该服务，建议结合防火墙或反向代理限制访问。
 
 ## 贡献
 
-欢迎提交新的平台脚本、改进现有构建流程或完善文档示例，我们会在 Review 中协助对齐输出目录与命名规范。提交 Pull Request 前请阅读脚本内的注释，保持 Shell 风格一致并附上可复现实验步骤。
+欢迎围绕以下方向提交改进：
 
-1. FORK -> PR
+- 新平台脚本
+- 现有构建流程优化
+- rootfs 生成能力增强
+- 文档修正与补充
 
-2. 如对构建流程、发布策略或镜像分发有进一步需求，欢迎在仓库 Issue 中反馈。
+提交 Pull Request 前，请保持脚本风格一致，并说明复现步骤。
 
 ## 许可证
 
-本项目基于 MIT 许可证授权 - 详见 [LICENSE](LICENSE) 文件。
+本项目基于 MIT License，详见 [LICENSE](LICENSE)。
