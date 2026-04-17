@@ -1,0 +1,6 @@
+diff --git a/source/bootloader/uboot/include/configs/hobot-s100.h b/source/bootloader/uboot/include/configs/hobot-s100.h
+--- a/source/bootloader/uboot/include/configs/hobot-s100.h
++++ b/source/bootloader/uboot/include/configs/hobot-s100.h
+@@ -128,1 +128,1 @@
+-		"silent=1\0"	\
++		"silent=0\0"	\

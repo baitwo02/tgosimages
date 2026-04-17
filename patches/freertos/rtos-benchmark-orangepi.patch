@@ -1,0 +1,3592 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index f3b21967756c0856f86acaa5d4ee7cc60d131f5c..44013a818de450a76ef1d08fd3c2986ed364d74b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -12,7 +12,9 @@ set(AVAILABLE_TESTS
+ 
+ set(AVAILABLE_RTOSES
+     zephyr
+-    freertos)
++    freertos
++    freertos_aarch64
++    freertos_aarch64_qemu)
+ 
+ set(ITERATIONS 10000 CACHE STRING "Number of iterations for each test")
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DITERATIONS=${ITERATIONS}")
+@@ -21,15 +23,21 @@ set(CALIBRATION_LOOPS 10000 CACHE STRING "Number of calibration loops for each t
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}")
+ 
+ if (NOT RTOS IN_LIST AVAILABLE_RTOSES)
+-    message(FATAL_ERROR "Choose either [zephyr] or [freertos]")
++    message(FATAL_ERROR "Choose one of [zephyr], [freertos], [freertos_aarch64], or [freertos_aarch64_qemu]")
+ endif()
+ 
+ # Add include directory for bench_api.h and bench_utils.h
+ include_directories(h)
+ 
+ # Include any ${RTOS} specific build rules
+-include(src/${RTOS}/${RTOS}.cmake)
+-add_subdirectory(src/${RTOS})
++# freertos_aarch64_qemu reuses the freertos_aarch64 directory
++if (RTOS STREQUAL "freertos_aarch64_qemu")
++    include(src/freertos_aarch64/freertos_aarch64_qemu.cmake)
++    add_subdirectory(src/freertos_aarch64)
++else()
++    include(src/${RTOS}/${RTOS}.cmake)
++    add_subdirectory(src/${RTOS})
++endif()
+ 
+ project(bench)
+ 
+diff --git a/h/bench_api.h b/h/bench_api.h
+index 4bd770e5f40f3da894f19e589e923e66c6766728..76c190158c3263eab3e9afcff2b9c2cdabd7d3aa 100644
+--- a/h/bench_api.h
++++ b/h/bench_api.h
+@@ -12,6 +12,9 @@
+ #ifdef FREERTOS
+ #include "../src/freertos/bench_porting_layer_freertos.h"
+ #endif /* FREERTOS */
++#ifdef FREERTOS_AARCH64
++#include "../src/freertos_aarch64/bench_porting_layer_aarch64.h"
++#endif /* FREERTOS_AARCH64 */
+ #ifdef RTEMS
+ #include "../src/rtems/bench_porting_layer_rtems.h"
+ #endif
+diff --git a/h/bench_utils.h b/h/bench_utils.h
+index 7020f2d17e019f3d9d76bc775512ca644a03fa08..6aeb801b9bd36d0597ec75245cea66eb97ce1493 100644
+--- a/h/bench_utils.h
++++ b/h/bench_utils.h
+@@ -17,6 +17,9 @@
+ #ifdef FREERTOS
+ #include "../freertos/bench_porting_layer_freertos.h"
+ #endif /* FREERTOS */
++#ifdef FREERTOS_AARCH64
++#include "../freertos_aarch64/bench_porting_layer_aarch64.h"
++#endif /* FREERTOS_AARCH64 */
+ #ifdef RTEMS
+ #include "../src/rtems/bench_porting_layer_rtems.h"
+ #endif /* RTEMS */
+diff --git a/src/common/bench_all.c b/src/common/bench_all.c
+index 942a8d0711140454db09c8ce198583e5c03c0681..b8b42b518bdbef6d8cd2ef79ac68b2838a872c0a 100644
+--- a/src/common/bench_all.c
++++ b/src/common/bench_all.c
+@@ -14,6 +14,13 @@ extern void bench_message_queue_init(void *arg);
+ 
+ void bench_all(void *arg)
+ {
++	/* Raw UART output to test if task started (bypasses PRINTF) */
++#ifdef BOARD_QEMU_VIRT
++	volatile uint32_t *uart_dr = (volatile uint32_t *)0x09000000;
++	*uart_dr = '!'; *uart_dr = 'T'; *uart_dr = 'A'; *uart_dr = 'S'; *uart_dr = 'K';
++	*uart_dr = '!'; *uart_dr = '\r'; *uart_dr = '\n';
++#endif
++
+ 	PRINTF("\n\r *** Starting! ***\n\n\r");
+ 
+ 	bench_basic_thread_ops(arg);
+@@ -25,8 +32,11 @@ void bench_all(void *arg)
+ 	bench_message_queue_init(arg);
+ 
+ 	/* This should be the last test as it can muck with the timer */
+-
++#if defined(SKIP_INTERRUPT_LATENCY_BENCH)
++	PRINTF("** Interrupt Stats skipped in this build **\n\r");
++#else
+ 	bench_interrupt_latency_test(arg);
++#endif
+ 
+ 	PRINTF("\n\r *** Done! ***\n\r");
+ }
+diff --git a/src/common/bench_mutex_lock_unlock_test.c b/src/common/bench_mutex_lock_unlock_test.c
+index 0a9e63d2f4690e2fe92a2caa34f2ea4d38420465..4012a7721c71d0f01d6c110c45490728023a31df 100644
+--- a/src/common/bench_mutex_lock_unlock_test.c
++++ b/src/common/bench_mutex_lock_unlock_test.c
+@@ -41,7 +41,7 @@ static struct bench_stats times[NUM_TIMES];
+ static bench_time_t  helper_start;
+ static bench_time_t  helper_end;
+ 
+-static const char *report_strings[NUM_TIMES] = {
++static const char * const report_strings[NUM_TIMES] = {
+     "Lock (no owner)",
+     "Unlock (no waiters)",
+     "Recursive lock",
+diff --git a/src/common/bench_utils.c b/src/common/bench_utils.c
+index d8181cfd6eb891f19521643572089dbf3c9adc8a..8ad4c3bb8a7a536c08c984e24a7364ccf9017ba9 100644
+--- a/src/common/bench_utils.c
++++ b/src/common/bench_utils.c
+@@ -5,6 +5,26 @@
+ #include <assert.h>
+ #include <stdint.h>
+ 
++static uint32_t summary_len(const char *summary)
++{
++	uint32_t len = 0;
++
++	while (summary && summary[len] != '\0')
++		len++;
++
++	return len;
++}
++
++static void bench_stats_report_prefix(const char *summary)
++{
++	uint32_t len = summary_len(summary);
++
++	PRINTF(" %s", summary);
++	while (len++ < 40U)
++		PRINTF(" ");
++	PRINTF(": ");
++}
++
+ void bench_stats_reset(struct bench_stats *stats)
+ {
+ 	stats->avg = 0;
+@@ -35,15 +55,17 @@ void bench_stats_report_title(const char *title)
+ 
+ void bench_stats_report_line(const char *summary, const struct bench_stats *stats)
+ {
+-	PRINTF(" %-40s: %6llu, %6llu, %6llu\n\r", summary,
+-	       bench_timing_cycles_to_ns(stats->avg),
+-	       bench_timing_cycles_to_ns(stats->min),
+-	       bench_timing_cycles_to_ns(stats->max));
++	bench_stats_report_prefix(summary);
++	PRINTF("%u, %u, %u\n\r",
++	       (unsigned int)bench_timing_cycles_to_ns(stats->avg),
++	       (unsigned int)bench_timing_cycles_to_ns(stats->min),
++	       (unsigned int)bench_timing_cycles_to_ns(stats->max));
+ }
+ 
+ void bench_stats_report_na(const char *summary)
+ {
+-	PRINTF(" %-40s: %6s, %6s, %6s\n\r", summary, "n/a", "n/a", "n/a");
++	bench_stats_report_prefix(summary);
++	PRINTF("n/a, n/a, n/a\n\r");
+ }
+ 
+ __weak void bench_collect_resources(void)
+diff --git a/src/freertos_aarch64_orangepi/.gitignore b/src/freertos_aarch64_orangepi/.gitignore
+new file mode 100644
+index 0000000000000000000000000000000000000000..adaefa63f9d24bf7db2f016745f5a393d704b90b
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/.gitignore
+@@ -0,0 +1,6 @@
++build/
++*.o
++*.elf
++*.bin
++*.map
++*.err
+diff --git a/src/freertos_aarch64_orangepi/README.md b/src/freertos_aarch64_orangepi/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..027c77f77bfd3d450b3248d85dc103f10ff24e51
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/README.md
+@@ -0,0 +1,85 @@
++# FreeRTOS RTOS Benchmark - Orange Pi 5 Plus (RK3588)
++
++在 Orange Pi 5 Plus (RK3588) 开发板上运行 FreeRTOS RTOS 性能基准测试。
++
++以裸金属 AMP 模式在 Cortex-A55 小核上运行，与 Linux 系统并行。
++
++## 前置条件
++
++- `aarch64-linux-gnu-gcc` 交叉编译工具链
++- [FreeRTOS-Kernel](https://github.com/FreeRTOS/FreeRTOS-Kernel) 源码
++- Orange Pi 5 Plus 开发板，已启动 u-boot
++
++## 构建
++
++```bash
++# 指定 FreeRTOS-Kernel 路径
++bash build.sh -k /path/to/FreeRTOS-Kernel
++
++# 清理后重新构建
++bash build.sh -k /path/to/FreeRTOS-Kernel -c
++
++# 自定义输出目录
++bash build.sh -k /path/to/FreeRTOS-Kernel -o /tmp/build
++```
++
++## 部署到 Orange Pi
++
++### 方法一: 使用 build.sh 的 -f 参数
++
++```bash
++bash build.sh -k /path/to/FreeRTOS-Kernel -f <orangepi-ip>
++```
++
++### 方法二: 手动部署
++
++```bash
++# 通过 scp 传输二进制文件
++scp build/freertos_aarch64_orangepi.bin root@<orangepi-ip>:/tmp/
++
++# 或通过 SD 卡 / USB
++cp build/freertos_aarch64_orangepi.bin /path/to/sd-card/
++```
++
++## 在 u-boot 中启动
++
++在 Orange Pi 的 u-boot 控制台中:
++
++```bash
++# 从 SD 卡加载二进制文件到内存
++=> fatload mmc 1:1 0x40000000 freertos_aarch64_orangepi.bin
++
++# 启动执行
++=> go 0x40000800
++```
++
++通过串口 (UART2, 1500000 波特率) 查看输出结果。
++
++## 配置
++
++通过环境变量自定义测试参数:
++
++```bash
++ITERATIONS=5000 CALIBRATION_LOOPS=5000 bash build.sh -k /path/to/FreeRTOS-Kernel
++```
++
++## 测试项目
++
++- `thread` - 线程创建/销毁
++- `malloc_free` - 内存分配/释放
++- `message_queue` - 消息队列
++- `mutex_lock_unlock` - 互斥锁加锁/解锁
++- `sem_context_switch` - 信号量上下文切换
++- `sem_signal_release` - 信号量信号释放
++- `thread_switch_yield` - 线程切换/让步
++- `interrupt_latency` - 中断延迟
++
++## 架构说明
++
++- **UART**: 16550 (RK3588 UART2, 波特率 1500000)
++- **中断控制器**: GIC-600 (GICv3 系统寄存器接口)
++- **定时器**: ARM Generic Timer (EL1 Physical Timer, 24 MHz)
++- **CPU 时钟**: 1.8 GHz (Cortex-A55 LITTLE 集群)
++- **内存起始**: 0x40000000 (保留 RAM 区域, 16MB)
++- **运行模式**: EL1 裸金属 AMP (与 Linux 并行运行)
++- **目标核心**: Cortex-A55 (CPU0-3 LITTLE 集群)
+diff --git a/src/freertos_aarch64_orangepi/build.sh b/src/freertos_aarch64_orangepi/build.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..71751a55e08517907922c2bc38ad010f15a8d1ed
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/build.sh
+@@ -0,0 +1,261 @@
++#!/bin/bash
++# SPDX-License-Identifier: Apache-2.0
++#
++# Build FreeRTOS rtos-benchmark for RK3588 Orange Pi 5 Plus (Cortex-A55)
++#
++# Usage:
++#   bash build.sh [OPTIONS]
++#
++# Options:
++#   -k, --kernel PATH    FreeRTOS-Kernel source path
++#   -o, --output PATH    Build output directory (default: build)
++#   -c, --clean          Clean before build
++#   -i, --enable-interrupt-latency  Enable interrupt latency benchmark in bench_all
++#   -f, --flash HOST     Flash binary to Orange Pi via scp
++#   -h, --help           Show this help
++#
++# Environment variables:
++#   CROSS_COMPILE        Cross compiler prefix (default: aarch64-linux-gnu-)
++#   FREERTOS_KERNEL_PATH FreeRTOS-Kernel source path (overridden by -k)
++#   ITERATIONS           Benchmark iterations (default: 10000)
++#   CALIBRATION_LOOPS    Calibration loops (default: 10000)
++
++set -e
++
++# ── Defaults ──────────────────────────────────────────────────────────────────
++SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
++PROJ="${SCRIPT_DIR}"
++CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
++ITERATIONS="${ITERATIONS:-10000}"
++CALIBRATION_LOOPS="${CALIBRATION_LOOPS:-10000}"
++CC="${CROSS_COMPILE}gcc"
++OBJCOPY="${CROSS_COMPILE}objcopy"
++SIZE="${CROSS_COMPILE}size"
++BD="${PROJ}/build"
++KERNEL=""
++CLEAN=0
++FLASH=""
++ENABLE_INTERRUPT_LATENCY="${ENABLE_INTERRUPT_LATENCY:-0}"
++
++# ── Parse arguments ───────────────────────────────────────────────────────────
++while [[ $# -gt 0 ]]; do
++    case $1 in
++        -k|--kernel)   KERNEL="$2"; shift 2 ;;
++        -o|--output)   BD="$2"; shift 2 ;;
++        -c|--clean)    CLEAN=1; shift ;;
++        -i|--enable-interrupt-latency) ENABLE_INTERRUPT_LATENCY=1; shift ;;
++        -f|--flash)    FLASH="$2"; shift 2 ;;
++        -h|--help)
++            sed -n '2,15p' "$0" | sed 's/^# \?//'
++            exit 0 ;;
++        *) echo "Unknown option: $1"; exit 1 ;;
++    esac
++done
++
++# ── Resolve FreeRTOS-Kernel path ─────────────────────────────────────────────
++if [ -z "$KERNEL" ]; then
++    KERNEL="${FREERTOS_KERNEL_PATH:-}"
++fi
++if [ -z "$KERNEL" ]; then
++    for candidate in \
++        "${PROJ}/FreeRTOS-Kernel" \
++        "${PROJ}/../FreeRTOS-Kernel" \
++        "${PROJ}/../../FreeRTOS-Kernel" \
++        "${PROJ}/../../../FreeRTOS-Kernel"; do
++        if [ -f "${candidate}/include/FreeRTOS.h" ]; then
++            KERNEL="$(cd "$candidate" && pwd)"
++            break
++        fi
++    done
++fi
++if [ -z "$KERNEL" ] || [ ! -f "${KERNEL}/include/FreeRTOS.h" ]; then
++    echo "ERROR: FreeRTOS-Kernel not found."
++    echo "  Set FREERTOS_KERNEL_PATH or use -k <path>"
++    echo "  Expected: <path>/include/FreeRTOS.h"
++    exit 1
++fi
++
++SRC="${PROJ}/src"
++COMMON_SRC="${PROJ}/../common"
++
++# ── Verify source directory ──────────────────────────────────────────────────
++if [ ! -f "${SRC}/bench_porting_layer_aarch64.c" ]; then
++    echo "ERROR: Source directory not found: ${SRC}"
++    exit 1
++fi
++
++# ── Clean ─────────────────────────────────────────────────────────────────────
++if [ "$CLEAN" -eq 1 ]; then
++    rm -rf "$BD"
++fi
++mkdir -p "$BD"
++
++# ── Compiler flags ────────────────────────────────────────────────────────────
++CF="-mcpu=cortex-a55 -mgeneral-regs-only -ffreestanding -nostdlib -fno-pic -fno-pie"
++CF="$CF -O2"
++CF="$CF -Wall -Wno-unused-parameter -Wno-unused-variable"
++CF="$CF -include stdbool.h"
++CF="$CF -DFREERTOS_AARCH64"
++CF="$CF -DBOARD_ORANGE_PI_5"
++CF="$CF -DSYS_CLOCK_HW_CYCLES_PER_SEC=1800000000"
++CF="$CF -DITERATIONS=${ITERATIONS} -DCALIBRATION_LOOPS=${CALIBRATION_LOOPS}"
++if [ "$ENABLE_INTERRUPT_LATENCY" != "1" ]; then
++    CF="$CF -DSKIP_INTERRUPT_LATENCY_BENCH=1"
++fi
++CF="$CF -I${PROJ}/h"
++CF="$CF -I${SRC}"
++CF="$CF -I${SRC}/board"
++CF="$CF -I${SRC}/port"
++CF="$CF -I${KERNEL}/include"
++
++cd "$PROJ"
++
++# ── Compile helper ────────────────────────────────────────────────────────────
++COMPILE_C() {
++    local src="$1"
++    local obj="$2"
++    if ! $CC $CF -c "$src" -o "$obj" 2>"${obj%.o}.err"; then
++        echo "  FAIL: $(basename "$src")"
++        cat "${obj%.o}.err"
++        return 1
++    fi
++    rm -f "${obj%.o}.err"
++    return 0
++}
++
++COMPILE_S() {
++    local src="$1"
++    local obj="$2"
++    if ! $CC $CF -c "$src" -o "$obj" 2>"${obj%.o}.err"; then
++        echo "  FAIL: $(basename "$src")"
++        cat "${obj%.o}.err"
++        return 1
++    fi
++    rm -f "${obj%.o}.err"
++    return 0
++}
++
++ERRORS=0
++
++# ── Compile ───────────────────────────────────────────────────────────────────
++echo "=== Building FreeRTOS rtos-benchmark for RK3588 Orange Pi 5 Plus ==="
++echo "  CC:      $CC"
++echo "  Kernel:  $KERNEL"
++echo "  Output:  $BD"
++echo "  Iter:    $ITERATIONS"
++echo "  Calib:   $CALIBRATION_LOOPS"
++echo "  EnableIRQ: $ENABLE_INTERRUPT_LATENCY"
++echo ""
++
++echo "--- Startup & FreeRTOS port ---"
++COMPILE_S "${SRC}/startup_aarch64.S"              "${BD}/startup.o"            || ERRORS=$((ERRORS+1))
++COMPILE_S "${SRC}/port/portASM.S"                  "${BD}/portASM.o"            || ERRORS=$((ERRORS+1))
++COMPILE_C "${SRC}/port/port.c"                     "${BD}/port.o"               || ERRORS=$((ERRORS+1))
++
++echo "--- Board drivers (16550 + GICv3) ---"
++COMPILE_C "${SRC}/board/uart_16550.c"              "${BD}/uart_16550.o"         || ERRORS=$((ERRORS+1))
++COMPILE_C "${SRC}/board/gicv3.c"                   "${BD}/gicv3.o"              || ERRORS=$((ERRORS+1))
++COMPILE_C "${SRC}/board/rk3588_timer.c"            "${BD}/rk3588_timer.o"       || ERRORS=$((ERRORS+1))
++
++echo "--- Architecture & timer ---"
++COMPILE_C "${SRC}/arch/arch_util.c"                "${BD}/arch_util.o"          || ERRORS=$((ERRORS+1))
++COMPILE_C "${SRC}/timer/bench_generic_timer.c"     "${BD}/bench_generic_timer.o"|| ERRORS=$((ERRORS+1))
++
++echo "--- Benchmark porting layer ---"
++COMPILE_C "${SRC}/bench_porting_layer_aarch64.c"   "${BD}/bench_porting.o"      || ERRORS=$((ERRORS+1))
++COMPILE_C "${SRC}/bare_metal.c"                    "${BD}/bare_metal.o"         || ERRORS=$((ERRORS+1))
++
++echo "--- FreeRTOS kernel ---"
++COMPILE_C "${KERNEL}/tasks.c"                      "${BD}/tasks.o"              || ERRORS=$((ERRORS+1))
++COMPILE_C "${KERNEL}/queue.c"                      "${BD}/queue.o"              || ERRORS=$((ERRORS+1))
++COMPILE_C "${KERNEL}/list.c"                       "${BD}/list.o"               || ERRORS=$((ERRORS+1))
++COMPILE_C "${KERNEL}/timers.c"                     "${BD}/timers.o"             || ERRORS=$((ERRORS+1))
++COMPILE_C "${KERNEL}/stream_buffer.c"              "${BD}/stream_buffer.o"      || ERRORS=$((ERRORS+1))
++COMPILE_C "${KERNEL}/event_groups.c"               "${BD}/event_groups.o"       || ERRORS=$((ERRORS+1))
++
++echo "--- Benchmark framework ---"
++COMPILE_C "${COMMON_SRC}/bench_utils.c"            "${BD}/bench_utils.o"        || ERRORS=$((ERRORS+1))
++COMPILE_C "${COMMON_SRC}/bench_all.c"              "${BD}/bench_all.o"          || ERRORS=$((ERRORS+1))
++
++echo "--- Benchmark tests ---"
++for test in thread malloc_free message_queue mutex_lock_unlock \
++            sem_context_switch sem_signal_release thread_switch_yield \
++            interrupt_latency; do
++    COMPILE_C "${COMMON_SRC}/bench_${test}_test.c" "${BD}/bench_${test}_test.o" || ERRORS=$((ERRORS+1))
++done
++
++if [ "$ERRORS" -gt 0 ]; then
++    echo ""
++    echo "=== COMPILATION FAILED ($ERRORS errors) ==="
++    exit 1
++fi
++
++# ── Link ──────────────────────────────────────────────────────────────────────
++echo ""
++echo "--- Linking ---"
++
++if ! $CC -nostdlib -no-pie -Wl,--no-warn-rwx-segments \
++    -T "${PROJ}/rk3588_aarch64.ld" \
++    "${BD}/startup.o" \
++    "${BD}/portASM.o" \
++    "${BD}/port.o" \
++    "${BD}/uart_16550.o" \
++    "${BD}/gicv3.o" \
++    "${BD}/rk3588_timer.o" \
++    "${BD}/arch_util.o" \
++    "${BD}/bench_generic_timer.o" \
++    "${BD}/bench_porting.o" \
++    "${BD}/bare_metal.o" \
++    "${BD}/tasks.o" \
++    "${BD}/queue.o" \
++    "${BD}/list.o" \
++    "${BD}/timers.o" \
++    "${BD}/stream_buffer.o" \
++    "${BD}/event_groups.o" \
++    "${BD}/bench_utils.o" \
++    "${BD}/bench_all.o" \
++    "${BD}/bench_thread_test.o" \
++    "${BD}/bench_malloc_free_test.o" \
++    "${BD}/bench_message_queue_test.o" \
++    "${BD}/bench_mutex_lock_unlock_test.o" \
++    "${BD}/bench_sem_context_switch_test.o" \
++    "${BD}/bench_sem_signal_release_test.o" \
++    "${BD}/bench_thread_switch_yield_test.o" \
++    "${BD}/bench_interrupt_latency_test.o" \
++    -lgcc \
++    -o "${BD}/freertos_aarch64_orangepi.elf" \
++    -Wl,-Map="${BD}/freertos_aarch64_orangepi.map" 2>&1; then
++    echo ""
++    echo "=== LINK FAILED ==="
++    exit 1
++fi
++
++# ── Generate binary ───────────────────────────────────────────────────────────
++$OBJCOPY -O binary "${BD}/freertos_aarch64_orangepi.elf" "${BD}/freertos_aarch64_orangepi.bin"
++
++# ── Summary ───────────────────────────────────────────────────────────────────
++echo ""
++echo "========================================="
++echo "  BUILD SUCCESSFUL"
++echo "========================================="
++echo ""
++$SIZE "${BD}/freertos_aarch64_orangepi.elf"
++echo ""
++BIN_SIZE=$(stat --printf='%s' "${BD}/freertos_aarch64_orangepi.bin")
++echo "  ELF:  ${BD}/freertos_aarch64_orangepi.elf"
++echo "  BIN:  ${BD}/freertos_aarch64_orangepi.bin (${BIN_SIZE} bytes)"
++echo "  MAP:  ${BD}/freertos_aarch64_orangepi.map"
++echo ""
++echo "Deploy to Orange Pi:"
++echo "  scp ${BD}/freertos_aarch64_orangepi.bin root@<orangepi-host>:/tmp/"
++echo "  # On Orange Pi u-boot console:"
++echo "  => fatload mmc 1:1 0x40000000 freertos_aarch64_orangepi.bin"
++echo "  => go 0x40000800"
++
++# ── Optionally flash ──────────────────────────────────────────────────────────
++if [ -n "$FLASH" ]; then
++    echo ""
++    echo "=== Flashing to Orange Pi ($FLASH) ==="
++    scp "${BD}/freertos_aarch64_orangepi.bin" "root@${FLASH}:/tmp/freertos_aarch64_orangepi.bin"
++    echo "Binary copied to ${FLASH}:/tmp/freertos_aarch64_orangepi.bin"
++fi
+diff --git a/src/freertos_aarch64_orangepi/h/bench_api.h b/src/freertos_aarch64_orangepi/h/bench_api.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..379f9b0a82ba9037f285df0f3b25804e13895487
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/h/bench_api.h
+@@ -0,0 +1,58 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef  BENCH_API_H
++#define  BENCH_API_H
++
++#define BENCH_SUCCESS 0 /* Value returned when operation succeeds */
++#define BENCH_ERROR 1 /* Value returned when operation fails */
++
++#ifdef FREERTOS_AARCH64
++#include "bench_porting_layer_aarch64.h"
++#endif /* FREERTOS_AARCH64 */
++
++typedef void (*bench_isr_handler_t)(void *arg);
++
++void bench_test_init(void (*test_init_function)(void *));
++void bench_thread_set_priority(int priority);
++int bench_thread_create(int thread_id, const char *thread_name, int priority,
++	void (*entry_function)(void *), void *args);
++int bench_thread_spawn(int thread_id, const char *thread_name, int priority,
++	void (*entry_function)(void *), void *args);
++void bench_thread_start(int thread_id);
++void bench_thread_resume(int thread_id);
++void bench_thread_suspend(int thread_id);
++void bench_thread_abort(int thread_id);
++void bench_thread_exit(void);
++void bench_yield(void);
++void bench_timing_init(void);
++void bench_sync_ticks(void);
++void bench_timing_start(void);
++void bench_timing_stop(void);
++bench_time_t bench_timing_counter_get(void);
++bench_time_t bench_timing_cycles_get(bench_time_t *time_start, bench_time_t *time_end);
++bench_time_t bench_timing_cycles_to_ns(bench_time_t cycles);
++int bench_sem_create(int sem_id, int initial_count, int maximum_count);
++void bench_sem_give(int sem_id);
++void bench_sem_give_from_isr(int sem_id);
++int bench_sem_take(int sem_id);
++int bench_mutex_create(int mutex_id);
++int bench_mutex_lock(int mutex_id);
++int bench_mutex_unlock(int mutex_id);
++void *bench_malloc(size_t size);
++void bench_free(void *ptr);
++int bench_message_queue_create(int mq_id, const char *mq_name,
++	size_t msg_max_num, size_t msg_max_len);
++int bench_message_queue_send(int mq_id, char *msg_ptr, size_t msg_len);
++int bench_message_queue_receive(int mq_id, char *msg_ptr, size_t msg_len);
++int bench_message_queue_delete(int mq_id, const char *mq_name);
++bench_isr_handler_t bench_timer_isr_get(void);
++void bench_timer_isr_set(bench_isr_handler_t handler);
++void bench_timer_isr_restore(bench_isr_handler_t handler);
++bench_time_t bench_timer_isr_expiry_set(uint32_t usec);
++bench_time_t bench_timer_cycles_diff(bench_time_t trigger, bench_time_t sample);
++bench_time_t bench_timer_cycles_get(void);
++uint32_t bench_timer_cycles_per_second(void);
++uint32_t bench_timer_cycles_per_tick(void);
++void bench_collect_resources(void);
++
++#endif /* BENCH_API_H */
+diff --git a/src/freertos_aarch64_orangepi/h/bench_utils.h b/src/freertos_aarch64_orangepi/h/bench_utils.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8aa0a5b401ec182e2441a2e4a64a9a31ac82098f
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/h/bench_utils.h
+@@ -0,0 +1,32 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef _LATENCY_MEASURE_UNIT_H
++#define _LATENCY_MEASURE_UNIT_H
++
++#include <stdio.h>
++
++#ifdef CSV_FORMAT_OUTPUT
++#define FORMAT "%-50s,%8u,%8u\n"
++#else
++#define FORMAT "%-50s:%8u cycles , %8u ns\n"
++#endif
++
++#ifdef FREERTOS_AARCH64
++#include "bench_porting_layer_aarch64.h"
++#endif /* FREERTOS_AARCH64 */
++
++struct bench_stats {
++	bench_time_t avg;
++	bench_time_t min;
++	bench_time_t max;
++	bench_time_t total;
++};
++
++void bench_stats_reset(struct bench_stats *stats);
++void bench_stats_update(struct bench_stats *stats, bench_time_t value,
++			uint32_t iteration);
++void bench_stats_report_title(const char *title);
++void bench_stats_report_line(const char *summary, const struct bench_stats *stats);
++void bench_stats_report_na(const char *summary);
++
++#endif
+diff --git a/src/freertos_aarch64_orangepi/rk3588_aarch64.ld b/src/freertos_aarch64_orangepi/rk3588_aarch64.ld
+new file mode 100644
+index 0000000000000000000000000000000000000000..3582beaa9413b04afb00ff5d430b00d040bec8e7
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/rk3588_aarch64.ld
+@@ -0,0 +1,53 @@
++/*
++ * Linker script for FreeRTOS benchmark on RK3588 (AArch64 bare metal AMP).
++ *
++ * Memory layout for Orange Pi 5:
++ * - The binary is loaded at 0x40000000 (reserved RAM region)
++ * - Linux runs on other cores using the rest of DRAM
++ * - Total region: 16 MB (enough for benchmark + stacks)
++ */
++
++ENTRY(Reset_Handler)
++
++MEMORY
++{
++    RAM (rwx) : ORIGIN = 0x40000000, LENGTH = 16M
++}
++
++SECTIONS
++{
++    .text : {
++        *(.text.boot)
++        *(.text .text.*)
++        *(.rodata .rodata.*)
++    } > RAM
++
++    .data : {
++        . = ALIGN(8);
++        *(.data .data.*)
++        . = ALIGN(8);
++    } > RAM
++
++    .bss : {
++        . = ALIGN(8);
++        __bss_start = .;
++        *(.bss .bss.*)
++        *(COMMON)
++        . = ALIGN(8);
++        __bss_end = .;
++    } > RAM
++
++    /* Stack and heap */
++    .stack (NOLOAD) : {
++        . = ALIGN(16);
++        _stack_bottom = .;
++        . += 65536;         /* 64 KB main stack */
++        _stack_top = .;
++    } > RAM
++
++    /DISCARD/ : {
++        *(.ARM.attributes)
++        *(.comment)
++        *(.note.*)
++    }
++}
+diff --git a/src/freertos_aarch64_orangepi/src/FreeRTOSConfig.h b/src/freertos_aarch64_orangepi/src/FreeRTOSConfig.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..8cc5729aa9a28d5db1b056762574c40f73db0478
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/FreeRTOSConfig.h
+@@ -0,0 +1,126 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++/*
++ * FreeRTOS configuration for RK3588 (AArch64, Cortex-A76).
++ * Based on FreeRTOS-Kernel portable/GCC/ARM_AARCH64 requirements.
++ */
++
++#ifndef FREERTOS_CONFIG_H
++#define FREERTOS_CONFIG_H
++
++#include "board_config.h"
++
++/*-----------------------------------------------------------
++ * Application specific definitions
++ *----------------------------------------------------------*/
++
++#define configUSE_PREEMPTION                    1
++#define configUSE_TICKLESS_IDLE                 0
++#define configCPU_CLOCK_HZ                      SYS_CLOCK_HW_CYCLES_PER_SEC
++#define configTICK_RATE_HZ                      ((TickType_t)1000)
++#define configMAX_PRIORITIES                    8
++#define configMINIMAL_STACK_SIZE                ((unsigned short)256)
++#define configMAX_TASK_NAME_LEN                 20
++#define configUSE_16_BIT_TICKS                  0
++#define configIDLE_SHOULD_YIELD                 1
++#define configUSE_TASK_NOTIFICATIONS            1
++#define configUSE_MUTEXES                       1
++#define configUSE_RECURSIVE_MUTEXES             1
++#define configUSE_COUNTING_SEMAPHORES           1
++#define configQUEUE_REGISTRY_SIZE               8
++#define configUSE_QUEUE_SETS                    0
++#define configUSE_TIME_SLICING                  0
++#define configUSE_NEWLIB_REENTRANT              0
++#define configENABLE_BACKWARD_COMPATIBILITY     0
++#define configNUM_THREAD_LOCAL_STORAGE_POINTERS 5
++
++/* Memory allocation - static only */
++#define configSUPPORT_STATIC_ALLOCATION         1
++#define configSUPPORT_DYNAMIC_ALLOCATION        0
++#define configTOTAL_HEAP_SIZE                   ((size_t)(64 * 1024))
++#define configAPPLICATION_ALLOCATED_HEAP        0
++
++/* Stack depth type */
++#define configSTACK_DEPTH_TYPE                  uint32_t
++
++/* Hook functions */
++#define configUSE_IDLE_HOOK                     0
++#define configUSE_TICK_HOOK                     0
++#define configCHECK_FOR_STACK_OVERFLOW          0
++#define configUSE_MALLOC_FAILED_HOOK            0
++#define configUSE_DAEMON_TASK_STARTUP_HOOK      0
++
++/* Run time stats */
++#define configGENERATE_RUN_TIME_STATS           0
++#define configUSE_TRACE_FACILITY                0
++#define configUSE_STATS_FORMATTING_FUNCTIONS    0
++
++/* Task aware debugging */
++#define configRECORD_STACK_HIGH_ADDRESS         1
++
++/* Co-routines */
++#define configUSE_CO_ROUTINES                   0
++#define configMAX_CO_ROUTINE_PRIORITIES         2
++
++/* Software timers */
++#define configUSE_TIMERS                        1
++#define configTIMER_TASK_PRIORITY               (configMAX_PRIORITIES - 2)
++#define configTIMER_QUEUE_LENGTH                10
++#define configTIMER_TASK_STACK_DEPTH            (configMINIMAL_STACK_SIZE * 2)
++
++/* Assert */
++#define configASSERT_DEFINED 1
++#define configASSERT(x) if ((x) == 0) { taskDISABLE_INTERRUPTS(); for (;;) ; }
++
++/* Optional functions */
++#define INCLUDE_vTaskPrioritySet                1
++#define INCLUDE_uxTaskPriorityGet               1
++#define INCLUDE_vTaskDelete                     1
++#define INCLUDE_vTaskSuspend                    1
++#define INCLUDE_vTaskDelayUntil                 1
++#define INCLUDE_vTaskDelay                      1
++#define INCLUDE_xTaskGetSchedulerState          1
++#define INCLUDE_xTaskGetCurrentTaskHandle       1
++#define INCLUDE_uxTaskGetStackHighWaterMark     0
++#define INCLUDE_xTaskGetIdleTaskHandle          0
++#define INCLUDE_eTaskGetState                   0
++#define INCLUDE_xTimerPendFunctionCall          1
++#define INCLUDE_xTaskAbortDelay                 0
++#define INCLUDE_xTaskGetHandle                  0
++#define INCLUDE_xTaskResumeFromISR              1
++
++/*-----------------------------------------------------------
++ * AArch64-specific configuration
++ *----------------------------------------------------------*/
++
++/* GICv3 interrupt configuration */
++#define configUNIQUE_INTERRUPT_PRIORITIES       256
++#define configMAX_API_CALL_INTERRUPT_PRIORITY   192
++#define configKERNEL_INTERRUPT_PRIORITY         255
++#define portPRIORITY_SHIFT                      0   /* GICv3 priority is already in LSBs */
++
++/* Tick interrupt setup - use our board driver */
++extern void vSetupTickInterrupt(void);
++#define configSETUP_TICK_INTERRUPT()            vSetupTickInterrupt()
++
++extern void vClearTickInterrupt(void);
++#define configCLEAR_TICK_INTERRUPT()            vClearTickInterrupt()
++
++/* No MPU */
++#define configENABLE_MPU                        0
++
++/* Benchmark code does not use FP/SIMD registers on QEMU or RK3588 EL1 bring-up. */
++#define configUSE_TASK_FPU_SUPPORT              1
++
++/* Single core for now */
++#ifndef configNUMBER_OF_CORES
++#define configNUMBER_OF_CORES                   1
++#endif
++
++/* EL1 bare metal */
++#define configRUN_IN_EL1                        1
++
++/* Port optimised task selection */
++#define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
++
++#endif /* FREERTOS_CONFIG_H */
+diff --git a/src/freertos_aarch64_orangepi/src/arch/arch_util.c b/src/freertos_aarch64_orangepi/src/arch/arch_util.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..cbc84625535f7347fccc36301378b0ac0109f4c1
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/arch/arch_util.c
+@@ -0,0 +1,63 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++/*
++ * Architecture-specific timing utilities for AArch64 (RK3588).
++ * Uses ARM Generic Timer physical counter (CNTPCT_EL0).
++ */
++
++#include "arch_api.h"
++#include "bench_api.h"
++#include "board_config.h"
++
++#define NSEC_PER_SEC 1000000000ULL
++
++static inline uint64_t read_cntpct_el0(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, cntpct_el0" : "=r" (val));
++	return val;
++}
++
++/*
++ * Note: On AArch64, the cycle counter frequency is the Generic Timer
++ * frequency (CNTFRQ_EL0), NOT the CPU core clock frequency.
++ * For RK3588, CNTFRQ_EL0 is typically 24 MHz.
++ * For cycle-accurate measurement relative to the CPU clock, we would
++ * need PMU counters (PMCCNTR_EL0), but the Generic Timer counter is
++ * sufficient for benchmarking purposes and is always accessible at EL1.
++ */
++
++void arch_timing_init(void)
++{
++	/* No special initialization needed - CNTPCT_EL0 is always available */
++}
++
++void arch_timing_start(void)
++{
++	/* No action needed - counter runs continuously */
++}
++
++void arch_timing_stop(void)
++{
++	/* No action needed */
++}
++
++bench_time_t arch_timing_counter_get(void)
++{
++	return (bench_time_t)read_cntpct_el0();
++}
++
++bench_time_t arch_timing_cycles_get(volatile bench_time_t *const start,
++				    volatile bench_time_t *const end)
++{
++	return (*end - *start);
++}
++
++bench_time_t arch_timing_cycles_to_ns(bench_time_t cycles)
++{
++	/*
++	 * Convert Generic Timer counter ticks to nanoseconds.
++	 * Use the actual counter frequency from hardware.
++	 */
++	return (cycles * NSEC_PER_SEC) / TIMER_FREQ;
++}
+diff --git a/src/freertos_aarch64_orangepi/src/arch_api.h b/src/freertos_aarch64_orangepi/src/arch_api.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..3e9c01a10c705b999ee20b2a94431ba0799e1767
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/arch_api.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef ARCH_API_H_
++#define ARCH_API_H_
++
++#include "bench_api.h"
++
++void arch_timing_init(void);
++void arch_timing_start(void);
++void arch_timing_stop(void);
++bench_time_t arch_timing_counter_get(void);
++bench_time_t arch_timing_cycles_get(volatile bench_time_t *const start,
++				    volatile bench_time_t *const end);
++bench_time_t arch_timing_cycles_to_ns(bench_time_t cycles);
++
++#endif /* ARCH_API_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/bare_metal.c b/src/freertos_aarch64_orangepi/src/bare_metal.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..4ae9d6d0536650588638f74be95c1b20a0230d7c
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/bare_metal.c
+@@ -0,0 +1,101 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++/*
++ * Bare-metal support functions for FreeRTOS on RK3588.
++ * Provides memset, memcpy, memmove, and assert handler.
++ * main() is provided by bench_all.c when RTOS_HAS_MAIN_ENTRY_POINT is set.
++ */
++
++#include <stddef.h>
++#include <stdint.h>
++
++/* ---- Bare-metal memory functions ---- */
++
++void *memset(void *s, int c, size_t n)
++{
++	unsigned char *p = (unsigned char *)s;
++	while (n--)
++		*p++ = (unsigned char)c;
++	return s;
++}
++
++void *memcpy(void *dest, const void *src, size_t n)
++{
++	unsigned char *d = (unsigned char *)dest;
++	const unsigned char *s = (const unsigned char *)src;
++	while (n--)
++		*d++ = *s++;
++	return dest;
++}
++
++void *memmove(void *dest, const void *src, size_t n)
++{
++	unsigned char *d = (unsigned char *)dest;
++	const unsigned char *s = (const unsigned char *)src;
++
++	if (d < s) {
++		while (n--)
++			*d++ = *s++;
++	} else {
++		d += n;
++		s += n;
++		while (n--)
++			*--d = *--s;
++	}
++	return dest;
++}
++
++/* ---- assert handler ---- */
++
++void __assert_fail(const char *expr, const char *file, int line, const char *func)
++{
++	extern int uart_printf(const char *fmt, ...);
++	uart_printf("ASSERT FAILED: %s\n  at %s:%d in %s\n", expr, file, line, func);
++	for (;;)
++		;
++}
++
++void vPortUnexpectedSyncException(uint64_t esr, uint64_t elr,
++				  uint64_t far, uint64_t spsr)
++{
++	extern int uart_printf(const char *fmt, ...);
++
++	uart_printf("\r\nUNEXPECTED SYNC EXCEPTION\r\n");
++	uart_printf("  ESR_EL1 = 0x%llx\r\n", esr);
++	uart_printf("  ELR_EL1 = 0x%llx\r\n", elr);
++	uart_printf("  FAR_EL1 = 0x%llx\r\n", far);
++	uart_printf("  SPSR_EL1 = 0x%llx\r\n", spsr);
++
++	for (;;)
++		;
++}
++
++void vPortUnexpectedFiqException(uint64_t esr, uint64_t elr,
++				 uint64_t far, uint64_t spsr)
++{
++	extern int uart_printf(const char *fmt, ...);
++
++	uart_printf("\r\nUNEXPECTED FIQ EXCEPTION\r\n");
++	uart_printf("  ESR_EL1 = 0x%llx\r\n", esr);
++	uart_printf("  ELR_EL1 = 0x%llx\r\n", elr);
++	uart_printf("  FAR_EL1 = 0x%llx\r\n", far);
++	uart_printf("  SPSR_EL1 = 0x%llx\r\n", spsr);
++
++	for (;;)
++		;
++}
++
++void vPortUnexpectedSErrorException(uint64_t esr, uint64_t elr,
++				    uint64_t far, uint64_t spsr)
++{
++	extern int uart_printf(const char *fmt, ...);
++
++	uart_printf("\r\nUNEXPECTED SERROR EXCEPTION\r\n");
++	uart_printf("  ESR_EL1 = 0x%llx\r\n", esr);
++	uart_printf("  ELR_EL1 = 0x%llx\r\n", elr);
++	uart_printf("  FAR_EL1 = 0x%llx\r\n", far);
++	uart_printf("  SPSR_EL1 = 0x%llx\r\n", spsr);
++
++	for (;;)
++		;
++}
+diff --git a/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.c b/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..a205daee12e94f629b5917ffb2cc0502d75939aa
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.c
+@@ -0,0 +1,392 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#include "bench_api.h"
++#include "bench_porting_layer_aarch64.h"
++
++/* FreeRTOS kernel includes */
++#include "FreeRTOS.h"
++#include "task.h"
++#include "queue.h"
++#include "timers.h"
++#include "semphr.h"
++
++/* Board drivers */
++#include "board_config.h"
++#include "uart_16550.h"
++#include "gicv3.h"
++
++#include "arch_api.h"
++
++#include <assert.h>
++
++extern void FreeRTOS_Tick_Handler(void);
++
++#define MAX_SEMAPHORES 5
++#define MAX_THREADS 10
++#define STACK_SIZE (configMINIMAL_STACK_SIZE + 200)
++#define MAX_MUTEXES 5
++#define MAX_QUEUES 1
++#define QUEUE_SIZE (1)
++
++static SemaphoreHandle_t semaphores[MAX_SEMAPHORES];
++static StaticSemaphore_t semaphore_buffer[MAX_SEMAPHORES];
++
++static TaskHandle_t threads[MAX_THREADS];
++static StackType_t stack_buffer[MAX_THREADS][STACK_SIZE];
++static StackType_t init_stack_buffer[STACK_SIZE];
++static StaticTask_t task_buffer[MAX_THREADS];
++static StaticTask_t init_task_buffer;
++
++static SemaphoreHandle_t mutexes[MAX_MUTEXES];
++static StaticSemaphore_t mutex_buffers[MAX_MUTEXES];
++
++static TaskHandle_t threads_to_remove[MAX_THREADS];
++static int threads_to_remove_idx;
++static SemaphoreHandle_t to_remove_sem;
++static StaticSemaphore_t to_remove_sem_buf;
++
++static QueueHandle_t queues[MAX_QUEUES];
++static uint8_t queue_storage[MAX_QUEUES][QUEUE_SIZE];
++static StaticQueue_t queue_buffer[MAX_QUEUES];
++
++#define benchmark_task_PRIORITY (configMAX_PRIORITIES - 1)
++
++/*
++ * FreeRTOS tick interrupt setup and handler.
++ * These are called by the FreeRTOS AArch64 port.
++ */
++void vSetupTickInterrupt(void)
++{
++	/* EL1 Physical Timer is configured, but GIC PPI enable is deferred while
++	 * isolating the scheduler-start SError source. */
++	extern void rk3588_timer_setup_tick(uint32_t tick_hz);
++	rk3588_timer_setup_tick(configTICK_RATE_HZ);
++}
++
++void vClearTickInterrupt(void)
++{
++	extern void rk3588_timer_clear_irq(uint32_t tick_hz);
++	rk3588_timer_clear_irq(configTICK_RATE_HZ);
++}
++
++/*
++ * Application IRQ handler - called by FreeRTOS IRQ handler.
++ * The benchmark temporarily replaces the physical timer ISR while measuring
++ * interrupt latency, so TIMER_EL1_IRQ must always dispatch via the current
++ * registered timer handler.
++ */
++void vApplicationIRQHandler(uint32_t intid)
++{
++	if (intid == TIMER_EL1_IRQ) {
++		bench_isr_handler_t handler = bench_timer_isr_get();
++
++		if (handler != NULL)
++			handler(NULL);
++	}
++}
++
++void bench_test_init(void (*test_init_function)(void *))
++{
++	TaskHandle_t handle;
++
++	/* Initialize UART for debug output */
++	uart_init(UART2_BASE, UART_CONSOLE_BAUD, UART_CONSOLE_CLK);
++
++	PRINTF("FreeRTOS benchmark on RK3588 Orange Pi 5 Plus (Cortex-A55)\r\n");
++
++	PRINTF("[DEBUG] Initializing GIC...\r\n");
++	/* Initialize GIC */
++	gicv3_init();
++	PRINTF("[DEBUG] GIC initialized.\r\n");
++
++	PRINTF("[DEBUG] Initializing timer...\r\n");
++	/* Initialize Generic Timer */
++	extern void rk3588_timer_init(void);
++	rk3588_timer_init();
++
++	/* Debug: read CNTFRQ_EL0 */
++	uint64_t cntfrq;
++	__asm__ volatile ("mrs %0, cntfrq_el0" : "=r" (cntfrq));
++	PRINTF("[DEBUG] CNTFRQ_EL0 = %u\r\n", (uint32_t)cntfrq);
++	PRINTF("[DEBUG] Timer initialized.\r\n");
++
++	to_remove_sem = xSemaphoreCreateCountingStatic(MAX_THREADS, 0,
++						       &to_remove_sem_buf);
++
++	handle = xTaskCreateStatic(test_init_function, "benchmark", STACK_SIZE,
++				   NULL, benchmark_task_PRIORITY,
++				   init_stack_buffer, &init_task_buffer);
++	if (handle == NULL) {
++		PRINTF("Task creation failed!\r\n");
++		for (;;) {
++		}
++	}
++
++	PRINTF("Starting FreeRTOS scheduler...\r\n");
++	vTaskStartScheduler();
++
++	/* Should never reach here */
++	PRINTF("Scheduler exited unexpectedly!\r\n");
++	for (;;) {
++	}
++}
++
++/* ---- Timing functions ---- */
++
++void bench_timing_init(void)
++{
++	arch_timing_init();
++}
++
++void bench_timing_start(void)
++{
++	arch_timing_start();
++}
++
++void bench_timing_stop(void)
++{
++	arch_timing_stop();
++}
++
++bench_time_t bench_timing_counter_get(void)
++{
++	return arch_timing_counter_get();
++}
++
++bench_time_t bench_timing_cycles_get(bench_time_t *time_start, bench_time_t *time_end)
++{
++	return arch_timing_cycles_get(time_start, time_end);
++}
++
++bench_time_t bench_timing_cycles_to_ns(bench_time_t cycles)
++{
++	return arch_timing_cycles_to_ns(cycles);
++}
++
++/* ---- Semaphore functions ---- */
++
++int bench_sem_create(int sem_id, int initial_count, int maximum_count)
++{
++	SemaphoreHandle_t handle;
++
++	handle = xSemaphoreCreateCountingStatic(maximum_count, initial_count,
++						&semaphore_buffer[sem_id]);
++	semaphores[sem_id] = handle;
++
++	return BENCH_SUCCESS;
++}
++
++void bench_sem_give(int sem_id)
++{
++	xSemaphoreGive(semaphores[sem_id]);
++}
++
++void bench_sem_give_from_isr(int sem_id)
++{
++	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
++
++	xSemaphoreGiveFromISR(semaphores[sem_id], &xHigherPriorityTaskWoken);
++	portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
++}
++
++int bench_sem_take(int sem_id)
++{
++	xSemaphoreTake(semaphores[sem_id], portMAX_DELAY);
++	return BENCH_SUCCESS;
++}
++
++/* ---- Mutex functions ---- */
++
++int bench_mutex_create(int mutex_id)
++{
++	assert(mutex_id < MAX_MUTEXES);
++
++	mutexes[mutex_id] =
++		xSemaphoreCreateRecursiveMutexStatic(&mutex_buffers[mutex_id]);
++	return BENCH_SUCCESS;
++}
++
++int bench_mutex_lock(int mutex_id)
++{
++	xSemaphoreTakeRecursive(mutexes[mutex_id], portMAX_DELAY);
++	return BENCH_SUCCESS;
++}
++
++int bench_mutex_unlock(int mutex_id)
++{
++	xSemaphoreGiveRecursive(mutexes[mutex_id]);
++	return BENCH_SUCCESS;
++}
++
++/* ---- Thread functions ---- */
++
++static UBaseType_t map_prio(int prio)
++{
++	/* FreeRTOS: lower number = lower priority, remap for benchmark */
++	assert(prio >= 0);
++	return configMAX_PRIORITIES - prio;
++}
++
++void bench_thread_set_priority(int priority)
++{
++	vTaskPrioritySet(NULL, map_prio(priority));
++}
++
++int bench_thread_create(int thread_id, const char *thread_name, int priority,
++	void (*entry_function)(void *), void *args)
++{
++	TaskHandle_t handle;
++
++	if (thread_id < 0 || thread_id >= MAX_THREADS)
++		return BENCH_ERROR;
++
++	handle = xTaskCreateStatic(entry_function, thread_name, STACK_SIZE,
++			   args, map_prio(priority),
++			   stack_buffer[thread_id],
++			   &task_buffer[thread_id]);
++
++	threads[thread_id] = handle;
++
++	if (handle == NULL)
++		return BENCH_ERROR;
++
++	return BENCH_SUCCESS;
++}
++
++int bench_thread_spawn(int thread_id, const char *thread_name, int priority,
++	void (*entry_function)(void *), void *args)
++{
++	/* FreeRTOS does not distinguish create from spawn */
++	return bench_thread_create(thread_id, thread_name, priority,
++				   entry_function, args);
++}
++
++void bench_thread_start(int thread_id)
++{
++	ARG_UNUSED(thread_id);
++	/* No-op: FreeRTOS tasks start when created */
++}
++
++void bench_thread_resume(int thread_id)
++{
++	vTaskResume(threads[thread_id]);
++}
++
++void bench_thread_suspend(int thread_id)
++{
++	vTaskSuspend(threads[thread_id]);
++}
++
++void bench_thread_abort(int thread_id)
++{
++	vTaskDelete(threads[thread_id]);
++}
++
++void bench_yield(void)
++{
++	taskYIELD();
++}
++
++void bench_sync_ticks(void)
++{
++}
++
++void bench_thread_exit(void)
++{
++	threads_to_remove[threads_to_remove_idx++] = xTaskGetCurrentTaskHandle();
++	xSemaphoreGive(to_remove_sem);
++	vTaskSuspend(NULL);
++}
++
++void bench_collect_resources(void)
++{
++	while (threads_to_remove_idx) {
++		xSemaphoreTake(to_remove_sem, portMAX_DELAY);
++		vTaskDelete(threads_to_remove[--threads_to_remove_idx]);
++	}
++}
++
++/* ---- Memory functions ---- */
++
++void *bench_malloc(size_t size)
++{
++	(void)size;
++	return NULL;   /* Not expected to be used */
++}
++
++void bench_free(void *ptr)
++{
++	(void)ptr;
++}
++
++/* ---- Message queue functions ---- */
++
++int bench_message_queue_create(int mq_id, const char *mq_name,
++	size_t msg_max_num, size_t msg_max_len)
++{
++	configASSERT(msg_max_len <= QUEUE_SIZE);
++
++	queues[mq_id] = xQueueCreateStatic(msg_max_num, msg_max_len,
++		queue_storage[mq_id], &queue_buffer[mq_id]);
++
++	if (queues[mq_id] == NULL)
++		return BENCH_ERROR;
++
++	return BENCH_SUCCESS;
++}
++
++int bench_message_queue_send(int mq_id, char *msg_ptr, size_t msg_len)
++{
++	BaseType_t ret;
++
++	ret = xQueueSend(queues[mq_id], msg_ptr, portMAX_DELAY);
++
++	if (ret != pdPASS)
++		return BENCH_ERROR;
++
++	return BENCH_SUCCESS;
++}
++
++int bench_message_queue_receive(int mq_id, char *msg_ptr, size_t msg_len)
++{
++	BaseType_t ret;
++
++	ret = xQueueReceive(queues[mq_id], msg_ptr, portMAX_DELAY);
++
++	if (ret != pdPASS)
++		return BENCH_ERROR;
++
++	return BENCH_SUCCESS;
++}
++
++int bench_message_queue_delete(int mq_id, const char *mq_name)
++{
++	vQueueDelete(queues[mq_id]);
++	return BENCH_SUCCESS;
++}
++
++/* ---- Idle/Timer task memory (required for static allocation) ---- */
++
++static StaticTask_t xIdleTaskTCBBuffer;
++static StackType_t xIdleStack[STACK_SIZE];
++
++void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
++				   StackType_t **ppxIdleTaskStackBuffer,
++				   configSTACK_DEPTH_TYPE *pulIdleTaskStackSize)
++{
++	*ppxIdleTaskTCBBuffer = &xIdleTaskTCBBuffer;
++	*ppxIdleTaskStackBuffer = xIdleStack;
++	*pulIdleTaskStackSize = STACK_SIZE;
++}
++
++static StaticTask_t xTimerTaskTCBBuffer;
++static StackType_t xTimerStack[STACK_SIZE];
++
++void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
++				    StackType_t **ppxTimerTaskStackBuffer,
++				    configSTACK_DEPTH_TYPE *pulTimerTaskStackSize)
++{
++	*ppxTimerTaskTCBBuffer = &xTimerTaskTCBBuffer;
++	*ppxTimerTaskStackBuffer = xTimerStack;
++	*pulTimerTaskStackSize = STACK_SIZE;
++}
+diff --git a/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.h b/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..ce010491322587995fbaa31068935bdede135e66
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/bench_porting_layer_aarch64.h
+@@ -0,0 +1,31 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef PORTING_LAYER_AARCH64_H_
++#define PORTING_LAYER_AARCH64_H_
++
++#include "FreeRTOS.h"
++
++typedef uint64_t bench_time_t;
++typedef void * bench_work;
++
++#include "uart_16550.h"
++
++#define PRINTF(fmt, ...) uart_printf(fmt, ##__VA_ARGS__)
++
++#define BENCH_LAST_PRIORITY (configMAX_PRIORITIES - 1)
++#define BENCH_IDLE_TIME     5
++
++#define __weak __attribute__((__weak__))
++
++#define ARG_UNUSED(x) (void)(x)
++
++/*
++ * FreeRTOS on AArch64 supports thread spawn (create + immediate start).
++ */
++#define RTOS_HAS_THREAD_SPAWN         1
++#define RTOS_HAS_THREAD_CREATE_START  0
++#define RTOS_HAS_SUSPEND_RESUME       1
++#define RTOS_HAS_MAIN_ENTRY_POINT     1
++#define RTOS_HAS_MESSAGE_QUEUE        1
++
++#endif /* PORTING_LAYER_AARCH64_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/board/board_config.h b/src/freertos_aarch64_orangepi/src/board/board_config.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..32ee6f9b192c797d1a25c59e85666832ceb265ed
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/board_config.h
+@@ -0,0 +1,8 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef BOARD_CONFIG_H_
++#define BOARD_CONFIG_H_
++
++#include "orange_pi_5.h"
++
++#endif /* BOARD_CONFIG_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/board/gicv3.c b/src/freertos_aarch64_orangepi/src/board/gicv3.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..df16bab2d7c405d8536cb7599c856252d276b82c
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/gicv3.c
+@@ -0,0 +1,314 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#include "gicv3.h"
++#include "board_config.h"
++
++#include <stdint.h>
++#include <stddef.h>
++
++static inline void write32(uintptr_t addr, uint32_t val)
++{
++	*(volatile uint32_t *)addr = val;
++}
++
++static inline uint32_t read32(uintptr_t addr)
++{
++	return *(volatile uint32_t *)addr;
++}
++
++static inline uint64_t read64(uintptr_t addr)
++{
++	uint64_t lo = read32(addr);
++	uint64_t hi = read32(addr + 4U);
++
++	return lo | (hi << 32);
++}
++
++/* GICv3 system register access via inline assembly */
++
++static inline void write_icc_pmr_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_PMR_EL1, %0" :: "r" (val));
++}
++
++static inline uint64_t read_icc_iar0_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_IAR0_EL1" : "=r" (val));
++	return val;
++}
++
++static inline uint64_t read_icc_iar1_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_IAR1_EL1" : "=r" (val));
++	return val;
++}
++
++static inline void write_icc_eoir0_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_EOIR0_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_eoir1_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_EOIR1_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_sre_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_SRE_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_ctlr_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_CTLR_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_igrpen0_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_IGRPEN0_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_igrpen1_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_IGRPEN1_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_bpr0_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_BPR0_EL1, %0" :: "r" (val));
++}
++
++static inline void dsb(void)
++{
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++static inline void isb(void)
++{
++	__asm__ volatile ("isb" ::: "memory");
++}
++
++static void gicr_wait_for_write_pending(uintptr_t gicr_base)
++{
++	while ((read32(gicr_base + GICR_CTLR) & (1U << 3)) != 0U) {
++	}
++}
++
++static inline uint64_t read_mpidr_el1(void)
++{
++	uint64_t val;
++
++	__asm__ volatile ("mrs %0, mpidr_el1" : "=r" (val));
++	return val;
++}
++
++static uintptr_t gicr_base_for_current_cpu(void)
++{
++	static uintptr_t cached_gicr_base;
++	uintptr_t gicr;
++	uint64_t mpidr;
++	uint64_t affinity;
++	uint64_t typer;
++	uint32_t i;
++
++	if (cached_gicr_base != 0U)
++		return cached_gicr_base;
++
++	mpidr = read_mpidr_el1();
++	affinity = ((mpidr >> 8) & 0xFF000000ULL) | (mpidr & 0x00FFFFFFULL);
++	gicr = GICR_BASE;
++
++	for (i = 0; i < GICR_FRAME_COUNT; i++) {
++		typer = read64(gicr + GICR_TYPER);
++
++		if ((typer >> 32) == affinity) {
++			cached_gicr_base = gicr;
++			return cached_gicr_base;
++		}
++
++		gicr += GICR_FRAME_STRIDE;
++	}
++
++	cached_gicr_base = GICR_BASE;
++	return cached_gicr_base;
++}
++
++typedef void (*gicr_apply_fn_t)(uintptr_t gicr_base, uint32_t intid, uint8_t priority);
++
++static void gicr_apply_to_all_redistributors(gicr_apply_fn_t fn, uint32_t intid, uint8_t priority)
++{
++	uintptr_t gicr = GICR_BASE;
++	uint32_t i;
++
++	for (i = 0; i < GICR_FRAME_COUNT; i++) {
++		fn(gicr, intid, priority);
++		gicr += GICR_FRAME_STRIDE;
++	}
++}
++
++/* Wake up the Redistributor: clear ProcessorSleep and wait for ChildrenAsleep to clear */
++static void gicr_wakeup(uintptr_t gicr_base)
++{
++    uint32_t val;
++
++    val = read32(gicr_base + GICR_WAKER);
++    val &= ~(1U << 1); /* clear ProcessorSleep */
++    write32(gicr_base + GICR_WAKER, val);
++
++    do {
++        val = read32(gicr_base + GICR_WAKER);
++    } while (val & (1U << 2)); /* wait for ChildrenAsleep == 0 */
++}
++
++static void gicr_configure_ppi_defaults(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
++{
++	uint32_t i;
++
++	(void)intid;
++	(void)priority;
++
++	write32(gicr_base + GICR_IGROUPR0, 0xFFFFFFFF);
++	write32(gicr_base + GICR_IGROUPMODR0, 0x0);
++
++	for (i = 0; i < 32; i += 4) {
++		write32(gicr_base + GICR_IPRIORITYR(i), 0xA0A0A0A0);
++	}
++
++	write32(gicr_base + GICR_ICENABLER0, 0xFFFFFFFF);
++	gicr_wait_for_write_pending(gicr_base);
++	write32(gicr_base + GICR_ICPENDR0, 0xFFFFFFFF);
++	gicr_wait_for_write_pending(gicr_base);
++}
++
++static void gicr_enable_ppi(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
++{
++	(void)priority;
++
++	write32(gicr_base + GICR_ISENABLER0, 1U << (intid % 32));
++	gicr_wait_for_write_pending(gicr_base);
++}
++
++static void gicr_disable_ppi(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
++{
++	(void)priority;
++
++	write32(gicr_base + GICR_ICENABLER0, 1U << (intid % 32));
++	gicr_wait_for_write_pending(gicr_base);
++}
++
++static void gicr_set_ppi_priority(uintptr_t gicr_base, uint32_t intid, uint8_t priority)
++{
++	uintptr_t addr = gicr_base + GICR_IPRIORITYR(intid & ~3U);
++	uint32_t shift = (intid & 3U) * 8U;
++	uint32_t val = read32(addr);
++
++	val &= ~(0xFFU << shift);
++	val |= ((uint32_t)priority) << shift;
++	write32(addr, val);
++	dsb();
++}
++
++void gicv3_init(void)
++{
++    uint32_t i;
++    uintptr_t gicd = GICD_BASE;
++    uintptr_t gicr = gicr_base_for_current_cpu();
++
++    write_icc_sre_el1(0x7);
++    isb();
++
++    /* Disable Distributor */
++    write32(gicd + GICD_CTLR, 0x0);
++    dsb();
++
++    /* Group 1 for all SPIs */
++    for (i = 32; i < 1020; i += 32) {
++        write32(gicd + GICD_IGROUPR(i),    0xFFFFFFFF);
++        write32(gicd + GICD_IGROUPMODR(i), 0x0);
++    }
++
++    /* Default priority */
++    for (i = 0; i < 1020; i += 4) {
++        write32(gicd + GICD_IPRIORITYR_NB(i), 0xA0A0A0A0);
++    }
++
++    /* Disable and clear pending for all SPIs */
++    for (i = 32; i < 1020; i += 32) {
++        write32(gicd + GICD_ICENABLER(i), 0xFFFFFFFF);
++        write32(gicd + GICD_ICPENDR(i),   0xFFFFFFFF);
++    }
++
++    /* Wake up Redistributor, then configure PPIs */
++    gicr_wakeup(gicr);
++    gicr_configure_ppi_defaults(gicr, 0U, 0U);
++
++    /* Enable Distributor: ARE_NS + EnableGrp1NS */
++    write32(gicd + GICD_CTLR, (1U << 4) | (1U << 1));
++    dsb();
++
++    write_icc_pmr_el1(0xFF);
++    write_icc_bpr0_el1(0x0);
++    write_icc_igrpen1_el1(0x1);
++    isb();
++}
++
++void gicv3_enable_interrupt(uint32_t intid)
++{
++    if (intid < 32) {
++        gicr_apply_to_all_redistributors(gicr_enable_ppi, intid, 0U);
++    } else {
++        /* Route SPI to CPU0 (mpidr affinity = 0) */
++        write32(GICD_BASE + GICD_IROUTER(intid),     0x0U); /* low 32 bits */
++        write32(GICD_BASE + GICD_IROUTER(intid) + 4, 0x0U); /* high 32 bits */
++        write32(GICD_BASE + GICD_ISENABLER(intid),
++                1U << (intid % 32));
++    }
++    dsb();
++}
++
++void gicv3_disable_interrupt(uint32_t intid)
++{
++	uintptr_t base;
++
++	if (intid < 32) {
++		gicr_apply_to_all_redistributors(gicr_disable_ppi, intid, 0U);
++	} else {
++		base = GICD_BASE;
++		write32(base + GICD_ICENABLER(intid), 1U << (intid % 32));
++	}
++	dsb();
++}
++
++void gicv3_set_priority(uint32_t intid, uint8_t priority)
++{
++	uintptr_t addr;
++	uint32_t shift;
++	uint32_t val;
++
++	if (intid < 32) {
++		/* PPI/SGI */
++		gicr_apply_to_all_redistributors(gicr_set_ppi_priority, intid, priority);
++	} else {
++		/* SPI */
++		addr = GICD_BASE + GICD_IPRIORITYR_NB(intid);
++		shift = (intid & 3U) * 8U;
++		val = read32(addr);
++		val &= ~(0xFFU << shift);
++		val |= ((uint32_t)priority) << shift;
++		write32(addr, val);
++	}
++	dsb();
++}
++
++uint32_t gicv3_acknowledge_irq(void)
++{
++	return (uint32_t)read_icc_iar1_el1();
++}
++
++void gicv3_eoi(uint32_t intid)
++{
++	write_icc_eoir1_el1((uint64_t)intid);
++	isb();
++}
+diff --git a/src/freertos_aarch64_orangepi/src/board/gicv3.h b/src/freertos_aarch64_orangepi/src/board/gicv3.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..40c20303da2f3f4395ea8de60f4471469bf3ba2c
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/gicv3.h
+@@ -0,0 +1,22 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef GICV3_H_
++#define GICV3_H_
++
++#include <stdint.h>
++
++#define GICD_IROUTER(intid)   (0x6000U + (uintptr_t)(intid) * 8U)
++
++/*
++ * GIC-600 (GICv3) minimal driver for RK3588
++ * Uses system register interface (ICC_*_EL1).
++ */
++
++void gicv3_init(void);
++void gicv3_enable_interrupt(uint32_t intid);
++void gicv3_disable_interrupt(uint32_t intid);
++void gicv3_set_priority(uint32_t intid, uint8_t priority);
++void gicv3_eoi(uint32_t intid);
++uint32_t gicv3_acknowledge_irq(void);
++
++#endif /* GICV3_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/board/orange_pi_5.h b/src/freertos_aarch64_orangepi/src/board/orange_pi_5.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..4d7f94965d033639b81b79a5946705ff30805c0e
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/orange_pi_5.h
+@@ -0,0 +1,61 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef ORANGE_PI_5_H_
++#define ORANGE_PI_5_H_
++
++/*
++ * RK3588 hardware address definitions for Orange Pi 5
++ * RK3588: 4x Cortex-A76 + 4x Cortex-A55, ARMv8.2-A
++ * Targeting Cortex-A55 (LITTLE cluster, CPU0-3)
++ */
++
++/* UART2 - Orange Pi 5 debug console */
++#define UART2_BASE              0xFEB50000UL
++#define UART_CONSOLE_BASE       UART2_BASE
++#define UART_CONSOLE_BAUD       1500000UL
++#define UART_CONSOLE_CLK        24000000UL
++
++/* GICv3 / GIC-600 from this DT */
++#define GICD_BASE               0xFE600000UL   /* Distributor */
++#define GICR_BASE               0xFE680000UL   /* Redistributor */
++#define GICR_FRAME_STRIDE       0x20000UL
++#define GICR_FRAME_COUNT        8U
++
++/* ARM Generic Timer */
++#define TIMER_FREQ              24000000UL     /* 24 MHz counter frequency */
++
++/* CPU clock - Cortex-A55 on RK3588 */
++#ifndef SYS_CLOCK_HW_CYCLES_PER_SEC
++#define SYS_CLOCK_HW_CYCLES_PER_SEC  1800000000UL
++#endif
++
++/* EL1 Physical Timer IRQ (GIC SPI ID = 30 + 32 = 62 in GICv3) */
++#define TIMER_EL1_IRQ           30
++/* EL1 Virtual Timer IRQ for benchmark-only latency measurements */
++#define BENCH_TIMER_IRQ         27
++
++/* GIC Distributor register offsets */
++#define GICD_CTLR               0x0000
++#define GICD_TYPER              0x0004
++#define GICD_ISENABLER(n)       (0x0100 + ((n) / 32) * 4)
++#define GICD_ICENABLER(n)       (0x0180 + ((n) / 32) * 4)
++#define GICD_ICPENDR(n)         (0x0280 + ((n) / 32) * 4)
++#define GICD_IPRIORITYR(n)      (0x0400 + (n))
++#define GICD_IPRIORITYR_NB(n)   (0x0400 + ((n) & ~3))
++#define GICD_IGROUPR(n)         (0x0080 + ((n) / 32) * 4)
++#define GICD_IGROUPMODR(n)      (0x0C00 + ((n) / 32) * 4)
++#define GICD_SGIR               0x0F00
++
++/* GIC Redistributor register offsets */
++#define GICR_CTLR               0x0000
++#define GICR_TYPER              0x0008
++#define GICR_WAKER              0x0014
++#define GICR_SGI_BASE           0x10000
++#define GICR_IGROUPR0           (GICR_SGI_BASE + 0x0080)
++#define GICR_IGROUPMODR0        (GICR_SGI_BASE + 0x0C00)
++#define GICR_ISENABLER0         (GICR_SGI_BASE + 0x0100)
++#define GICR_ICENABLER0         (GICR_SGI_BASE + 0x0180)
++#define GICR_ICPENDR0           (GICR_SGI_BASE + 0x0280)
++#define GICR_IPRIORITYR(n)      (GICR_SGI_BASE + 0x0400 + (n))
++
++#endif /* ORANGE_PI_5_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/board/rk3588_timer.c b/src/freertos_aarch64_orangepi/src/board/rk3588_timer.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..20acd2f0047ab1705fa581a861a045f6a87c3016
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/rk3588_timer.c
+@@ -0,0 +1,122 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#include "board_config.h"
++#include "gicv3.h"
++
++/*
++ * ARM Generic Timer driver for RK3588.
++ * Uses EL1 Physical Timer (CNTP_TVAL_EL0 / CNTP_CTL_EL0) for tick generation.
++ * The counter frequency is typically 24 MHz (set by firmware via CNTFRQ_EL0).
++ */
++
++static inline uint64_t read_cntpct_el0(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, cntpct_el0" : "=r" (val));
++	return val;
++}
++
++static inline void write_cntp_tval_el0(uint64_t val)
++{
++	__asm__ volatile ("msr cntp_tval_el0, %0" :: "r" (val));
++}
++
++static inline void write_cntp_ctl_el0(uint64_t val)
++{
++	__asm__ volatile ("msr cntp_ctl_el0, %0" :: "r" (val));
++}
++
++static inline uint64_t read_cntp_ctl_el0(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, cntp_ctl_el0" : "=r" (val));
++	return val;
++}
++
++static inline void write_cntfrq_el0(uint64_t val)
++{
++	__asm__ volatile ("msr cntfrq_el0, %0" :: "r" (val));
++}
++
++static inline uint64_t read_cntfrq_el0(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, cntfrq_el0" : "=r" (val));
++	return val;
++}
++
++static inline void dsb(void)
++{
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++static inline void isb(void)
++{
++	__asm__ volatile ("isb" ::: "memory");
++}
++
++/*
++ * Get the counter frequency. This is typically set by firmware (u-boot/ATF)
++ * but we read it from the system register as a fallback.
++ */
++uint64_t rk3588_timer_get_freq(void)
++{
++	return read_cntfrq_el0();
++}
++
++/*
++ * Initialize the EL1 Physical Timer for periodic tick interrupts.
++ * The timer is configured but not enabled here - that happens in vPortSetupTimerInterrupt().
++ */
++void rk3588_timer_init(void)
++{
++	/* Disable the timer first */
++	write_cntp_ctl_el0(0);
++	isb();
++}
++
++/*
++ * Set up a one-shot or periodic tick using EL1 Physical Timer.
++ * Called by FreeRTOS to set up the tick interrupt.
++ */
++void rk3588_timer_setup_tick(uint32_t tick_hz)
++{
++	uint64_t freq = rk3588_timer_get_freq();
++	uint64_t tval = freq / tick_hz;
++
++	/* Disable timer */
++	write_cntp_ctl_el0(0);
++	isb();
++
++	/* Set the timer value (counts down from tval to 0, then fires IRQ) */
++	write_cntp_tval_el0(tval);
++	isb();
++
++	/*
++	 * Diagnostic isolation: keep the tick IRQ disabled while debugging the
++	 * first-task entry fault on Orange Pi. If the task now starts, the bug is
++	 * in the early IRQ save/restore path rather than in the initial eret path.
++	 */
++}
++
++/*
++ * Clear the EL1 Physical Timer interrupt.
++ * Called from the timer ISR to acknowledge and re-arm.
++ */
++void rk3588_timer_clear_irq(uint32_t tick_hz)
++{
++	uint64_t freq = rk3588_timer_get_freq();
++	uint64_t tval = freq / tick_hz;
++
++	/* Re-arm the timer by writing a new TVAL (auto-clears the IRQ status) */
++	write_cntp_tval_el0(tval);
++	isb();
++}
++
++/*
++ * Read the current physical counter value.
++ */
++uint64_t rk3588_timer_get_counter(void)
++{
++	return read_cntpct_el0();
++}
+diff --git a/src/freertos_aarch64_orangepi/src/board/uart_16550.c b/src/freertos_aarch64_orangepi/src/board/uart_16550.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..0dae17bbf2c85ccfb1374679b693468a76458030
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/uart_16550.c
+@@ -0,0 +1,300 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#include "uart_16550.h"
++
++/*
++ * Minimal 16550 UART driver for RK3588 (Orange Pi 5)
++ * Only TX is needed for benchmark output.
++ */
++
++/* 16550 register offsets */
++#define UART_THR    0x00  /* Transmit Holding Register (write) */
++#define UART_RBR    0x00  /* Receive Buffer Register (read) */
++#define UART_IER    0x04  /* Interrupt Enable Register */
++#define UART_FCR    0x08  /* FIFO Control Register (write) */
++#define UART_LCR    0x0C  /* Line Control Register */
++#define UART_MCR    0x10  /* Modem Control Register */
++#define UART_LSR    0x14  /* Line Status Register */
++#define UART_MSR    0x18  /* Modem Status Register */
++#define UART_SCR    0x1C  /* Scratch Register */
++
++/* LSR bits */
++#define LSR_THRE    (1 << 5)  /* Transmit Holding Register Empty */
++#define LSR_DR      (1 << 0)  /* Data Ready */
++
++/* LCR bits */
++#define LCR_DLAB    (1 << 7)  /* Divisor Latch Access Bit */
++#define LCR_8N1     0x03      /* 8 data bits, no parity, 1 stop bit */
++
++/* FCR bits */
++#define FCR_ENABLE  0x01      /* Enable FIFOs */
++#define FCR_CLEAR  0x06       /* Clear both FIFOs */
++
++static inline void uart_write_reg(uintptr_t base, uint32_t offset, uint8_t val)
++{
++	*(volatile uint8_t *)(base + offset) = val;
++}
++
++static inline uint8_t uart_read_reg(uintptr_t base, uint32_t offset)
++{
++	return *(volatile uint8_t *)(base + offset);
++}
++
++void uart_init(uintptr_t base, uint32_t baudrate, uint32_t clk_freq)
++{
++	uint16_t divisor = (uint16_t)(clk_freq / (16 * baudrate));
++
++	/* Disable interrupts */
++	uart_write_reg(base, UART_IER, 0x00);
++
++	/* Enable DLAB to set baud rate */
++	uart_write_reg(base, UART_LCR, LCR_DLAB);
++
++	/* Set divisor */
++	uart_write_reg(base, 0x00, (uint8_t)(divisor & 0xFF));       /* DLL */
++	uart_write_reg(base, 0x04, (uint8_t)((divisor >> 8) & 0xFF)); /* DLH */
++
++	/* 8 data bits, no parity, 1 stop bit, clear DLAB */
++	uart_write_reg(base, UART_LCR, LCR_8N1);
++
++	/* Enable FIFOs and clear them */
++	uart_write_reg(base, UART_FCR, FCR_ENABLE | FCR_CLEAR);
++
++	/* Set DTR + RTS */
++	uart_write_reg(base, UART_MCR, 0x03);
++}
++
++void uart_putc(uintptr_t base, char ch)
++{
++	while (!(uart_read_reg(base, UART_LSR) & LSR_THRE))
++		;
++	uart_write_reg(base, UART_THR, (uint8_t)ch);
++}
++
++void uart_puts(uintptr_t base, const char *str)
++{
++	while (*str) {
++		if (*str == '\n')
++			uart_putc(base, '\r');
++		uart_putc(base, *str++);
++	}
++}
++
++/*
++ * Minimal printf implementation for benchmark output.
++ * Supports:
++ *   %d %u %x %s %c %%
++ *   field width (for example %6llu, %-40s)
++ *   l / ll length modifiers
++ */
++#include "board_config.h"
++
++static void uart_put_repeat(uintptr_t uart_base, char ch, int count)
++{
++	while (count-- > 0)
++		uart_putc(uart_base, ch);
++}
++
++static int str_len(const char *str)
++{
++	int len = 0;
++
++	while (str && str[len])
++		len++;
++
++	return len;
++}
++
++static int format_unsigned(char *buf, unsigned long long val, int radix)
++{
++	static const char digits[] = "0123456789abcdef";
++	int i = 0;
++
++	if (val == 0ULL) {
++		buf[i++] = '0';
++		return i;
++	}
++
++	while (val > 0ULL) {
++		buf[i++] = digits[val % (unsigned long long)radix];
++		val /= radix;
++	}
++
++	return i;
++}
++
++static void print_unsigned(uintptr_t uart_base, unsigned long long val,
++			   int radix, int width, int left_align)
++{
++	char buf[32];
++	int len = format_unsigned(buf, val, radix);
++	int pad = (width > len) ? (width - len) : 0;
++
++	if (!left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++
++	while (--len >= 0)
++		uart_putc(uart_base, buf[len]);
++
++	if (left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++}
++
++static void print_signed(uintptr_t uart_base, long long val,
++			 int width, int left_align)
++{
++	unsigned long long abs_val;
++	int negative = 0;
++	char buf[32];
++	int len;
++	int pad;
++
++	if (val < 0) {
++		negative = 1;
++		abs_val = (unsigned long long)(-(val + 1)) + 1ULL;
++	} else {
++		abs_val = (unsigned long long)val;
++	}
++
++	len = format_unsigned(buf, abs_val, 10) + negative;
++	pad = (width > len) ? (width - len) : 0;
++
++	if (!left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++
++	if (negative)
++		uart_putc(uart_base, '-');
++
++	len = format_unsigned(buf, abs_val, 10);
++	while (--len >= 0)
++		uart_putc(uart_base, buf[len]);
++
++	if (left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++}
++
++static void print_string(uintptr_t uart_base, const char *str,
++			 int width, int left_align)
++{
++	int len;
++	int pad;
++
++	if (!str)
++		str = "(null)";
++
++	len = str_len(str);
++	pad = (width > len) ? (width - len) : 0;
++
++	if (!left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++
++	uart_puts(uart_base, str);
++
++	if (left_align)
++		uart_put_repeat(uart_base, ' ', pad);
++}
++
++int uart_printf(const char *fmt, ...)
++{
++	__builtin_va_list ap;
++	uintptr_t uart_base = UART2_BASE;
++
++	__builtin_va_start(ap, fmt);
++
++	while (*fmt) {
++		if (*fmt != '%') {
++			if (*fmt == '\n')
++				uart_putc(uart_base, '\r');
++			uart_putc(uart_base, *fmt++);
++			continue;
++		}
++
++		fmt++; /* skip '%' */
++
++		int left_align = 0;
++		int width = 0;
++		int length = 0;
++
++		if (*fmt == '-') {
++			left_align = 1;
++			fmt++;
++		}
++
++		while (*fmt >= '0' && *fmt <= '9') {
++			width = (width * 10) + (*fmt - '0');
++			fmt++;
++		}
++
++		while (*fmt == 'l') {
++			length++;
++			fmt++;
++		}
++
++		switch (*fmt) {
++		case 'd':
++			if (length >= 2)
++				print_signed(uart_base, __builtin_va_arg(ap, long long),
++					     width, left_align);
++			else if (length == 1)
++				print_signed(uart_base, __builtin_va_arg(ap, long),
++					     width, left_align);
++			else
++				print_signed(uart_base, __builtin_va_arg(ap, int),
++					     width, left_align);
++			break;
++		case 'u':
++			if (length >= 2)
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned long long),
++					      10, width, left_align);
++			else if (length == 1)
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned long),
++					      10, width, left_align);
++			else
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned int),
++					      10, width, left_align);
++			break;
++		case 'x':
++			if (length >= 2)
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned long long),
++					      16, width, left_align);
++			else if (length == 1)
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned long),
++					      16, width, left_align);
++			else
++				print_unsigned(uart_base,
++					      __builtin_va_arg(ap, unsigned int),
++					      16, width, left_align);
++			break;
++		case 's': {
++			const char *s = __builtin_va_arg(ap, const char *);
++			print_string(uart_base, s, width, left_align);
++			break;
++		}
++		case 'c': {
++			char ch = (char)__builtin_va_arg(ap, int);
++			if (!left_align && width > 1)
++				uart_put_repeat(uart_base, ' ', width - 1);
++			uart_putc(uart_base, ch);
++			if (left_align && width > 1)
++				uart_put_repeat(uart_base, ' ', width - 1);
++			break;
++		}
++		case '%':
++			uart_putc(uart_base, '%');
++			break;
++		default:
++			uart_putc(uart_base, '%');
++			uart_putc(uart_base, *fmt);
++			break;
++		}
++		fmt++;
++	}
++
++	__builtin_va_end(ap);
++	return 0;
++}
+diff --git a/src/freertos_aarch64_orangepi/src/board/uart_16550.h b/src/freertos_aarch64_orangepi/src/board/uart_16550.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..db31c19c0e88ddaacfdc917cc545031a40e6d47f
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/board/uart_16550.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++#ifndef UART_16550_H_
++#define UART_16550_H_
++
++#include <stdint.h>
++#include <stddef.h>
++
++void uart_init(uintptr_t base, uint32_t baudrate, uint32_t clk_freq);
++void uart_putc(uintptr_t base, char ch);
++void uart_puts(uintptr_t base, const char *str);
++
++/* Printf-like output to UART for benchmark results */
++int uart_printf(const char *fmt, ...);
++
++#endif /* UART_16550_H_ */
+diff --git a/src/freertos_aarch64_orangepi/src/port/port.c b/src/freertos_aarch64_orangepi/src/port/port.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff9ee3a41fec5c1fdcd7ae0642f9ef1b9d3c56f6
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/port/port.c
+@@ -0,0 +1,381 @@
++/*
++ * FreeRTOS AArch64 port for RK3588 (GICv3 system register interface)
++ *
++ * Adapted from FreeRTOS-Kernel portable/GCC/ARM_AARCH64/port.c
++ * Modified to use GICv3 ICC_*_EL1 system registers instead of MMIO.
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++/* Scheduler includes */
++#include "FreeRTOS.h"
++#include "task.h"
++
++#include <stdint.h>
++#include <string.h>
++
++/* GICv3 system register access helpers */
++static inline uint64_t read_icc_pmr_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_PMR_EL1" : "=r" (val));
++	return val;
++}
++
++static inline void write_icc_pmr_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_PMR_EL1, %0" :: "r" (val));
++}
++
++static inline uint64_t read_icc_bpr0_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_BPR0_EL1" : "=r" (val));
++	return val;
++}
++
++static inline uint64_t read_icc_rpr_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_RPR_EL1" : "=r" (val));
++	return val;
++}
++
++static inline uint64_t read_icc_iar1_el1(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, ICC_IAR1_EL1" : "=r" (val));
++	return val;
++}
++
++static inline void write_icc_eoir1_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_EOIR1_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_sre_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_SRE_EL1, %0" :: "r" (val));
++}
++
++static inline void write_icc_igrpen1_el1(uint64_t val)
++{
++	__asm__ volatile ("msr ICC_IGRPEN1_EL1, %0" :: "r" (val));
++}
++
++/* Constants */
++#define portNO_CRITICAL_NESTING      ( ( size_t ) 0 )
++#define portNO_FLOATING_POINT_CONTEXT ( ( StackType_t ) 0 )
++#define portUNMASK_VALUE             ( 0xFFUL )
++#define portBINARY_POINT_BITS        ( ( uint8_t ) 0x03 )
++#define portMAX_BINARY_POINT_VALUE   ( ( uint8_t ) 0x00 )
++#define portAPSR_MODE_BITS_MASK      ( 0x0C )
++#define portDAIF_I                   ( 0x80 )
++#define portFPU_REGISTER_WORDS       ( 32 * 2 ) /* 32 x 128-bit = 64 x 64-bit */
++
++/* EL1 configuration for bare-metal AMP */
++#define portSP_ELx   ( ( StackType_t ) 0x01 )
++#define portSP_EL0   ( ( StackType_t ) 0x00 )
++#define portEL1      ( ( StackType_t ) 0x04 )
++#define portINITIAL_PSTATE ( portEL1 | portSP_EL0 )
++
++/* GICv3 priority: use ICC_PMR_EL1 for interrupt masking */
++#define portICCPMR_PRIORITY_MASK_REGISTER  read_icc_pmr_el1()
++#define portICCBPR_BINARY_POINT_REGISTER   read_icc_bpr0_el1()
++#define portICCRPR_RUNNING_PRIORITY_REGISTER read_icc_rpr_el1()
++
++/* Used to pass IAR value from ASM to C handler */
++__attribute__( ( used ) ) volatile uint64_t ullICCIARValue = 0;
++
++/* Saved as part of task context */
++volatile uint64_t ullCriticalNesting = 9999ULL;
++uint64_t ullPortTaskHasFPUContext = pdFALSE;
++uint64_t ullPortYieldRequired = pdFALSE;
++uint64_t ullPortInterruptNesting = 0;
++
++/* Forward declarations - match portmacro.h extern declarations */
++extern UBaseType_t uxPortSetInterruptMask(void);
++extern void vPortClearInterruptMask(UBaseType_t uxNewMaskValue);
++
++__attribute__( ( used ) ) const uint64_t ullMaxAPIPriorityMask =
++	( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
++
++extern void vPortRestoreTaskContext(void);
++extern void vPortLogInitialStack(uint64_t pxCode, uint64_t *pxTopOfStack);
++extern void * volatile pxCurrentTCB;
++
++static void vPortLogSchedulerStartState(void)
++{
++	volatile uintptr_t *tcb;
++	volatile uintptr_t *stack_top;
++
++	extern int uart_printf(const char *fmt, ...);
++
++	tcb = (volatile uintptr_t *)pxCurrentTCB;
++	uart_printf("[DEBUG] pxCurrentTCB = 0x%llx\r\n",
++		    (unsigned long long)(uintptr_t)tcb);
++
++	if (tcb == NULL) {
++		uart_printf("[DEBUG] pxCurrentTCB is NULL before first restore\r\n");
++		return;
++	}
++
++	stack_top = (volatile uintptr_t *)tcb[0];
++	uart_printf("[DEBUG] first task top-of-stack = 0x%llx\r\n",
++		    (unsigned long long)(uintptr_t)stack_top);
++
++	if (stack_top == NULL) {
++		uart_printf("[DEBUG] first task stack pointer is NULL\r\n");
++		return;
++	}
++
++	uart_printf("[DEBUG] stack[0]=0x%llx stack[1]=0x%llx\r\n",
++		    (unsigned long long)stack_top[0],
++		    (unsigned long long)stack_top[1]);
++	uart_printf("[DEBUG] stack[2]=0x%llx stack[3]=0x%llx\r\n",
++		    (unsigned long long)stack_top[2],
++		    (unsigned long long)stack_top[3]);
++}
++
++/*-----------------------------------------------------------*/
++
++StackType_t * pxPortInitialiseStack(StackType_t * pxTopOfStack,
++				    TaskFunction_t pxCode,
++				    void * pvParameters)
++{
++	/* Setup the initial stack of the task as expected by portRESTORE_CONTEXT. */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0101010101010101ULL; /* X1 */
++	pxTopOfStack--;
++	*pxTopOfStack = (StackType_t) pvParameters; /* X0 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0303030303030303ULL; /* X3 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0202020202020202ULL; /* X2 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0505050505050505ULL; /* X5 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0404040404040404ULL; /* X4 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0707070707070707ULL; /* X7 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0606060606060606ULL; /* X6 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0909090909090909ULL; /* X9 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x0808080808080808ULL; /* X8 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1111111111111111ULL; /* X11 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1010101010101010ULL; /* X10 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1313131313131313ULL; /* X13 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1212121212121212ULL; /* X12 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1515151515151515ULL; /* X15 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1414141414141414ULL; /* X14 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1717171717171717ULL; /* X17 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1616161616161616ULL; /* X16 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1919191919191919ULL; /* X19 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x1818181818181818ULL; /* X18 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2121212121212121ULL; /* X21 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2020202020202020ULL; /* X20 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2323232323232323ULL; /* X23 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2222222222222222ULL; /* X22 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2525252525252525ULL; /* X25 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2424242424242424ULL; /* X24 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2727272727272727ULL; /* X27 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2626262626262626ULL; /* X26 */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2929292929292929ULL; /* X29 (FP) */
++	pxTopOfStack--;
++	*pxTopOfStack = 0x2828282828282828ULL; /* X28 */
++	pxTopOfStack--;
++	*pxTopOfStack = (StackType_t) 0x00;    /* XZR - padding */
++	pxTopOfStack--;
++	*pxTopOfStack = (StackType_t) 0x00;    /* X30 (LR) */
++	pxTopOfStack--;
++	*pxTopOfStack = portINITIAL_PSTATE;    /* SPSR */
++	pxTopOfStack--;
++	*pxTopOfStack = (StackType_t) pxCode;  /* ELR (entry point) */
++
++#if ( configUSE_TASK_FPU_SUPPORT == 1 )
++	/* The task starts with interrupts enabled and no FPU context. */
++	pxTopOfStack--;
++	*pxTopOfStack = portNO_CRITICAL_NESTING;
++	pxTopOfStack--;
++	*pxTopOfStack = portNO_FLOATING_POINT_CONTEXT;
++#elif ( configUSE_TASK_FPU_SUPPORT == 2 )
++	/* Reserve and clear space for 32 128-bit Q registers. */
++	pxTopOfStack -= portFPU_REGISTER_WORDS;
++	memset(pxTopOfStack, 0x00, portFPU_REGISTER_WORDS * sizeof(StackType_t));
++
++	pxTopOfStack--;
++	*pxTopOfStack = portNO_CRITICAL_NESTING;
++	pxTopOfStack--;
++	*pxTopOfStack = pdTRUE;
++	ullPortTaskHasFPUContext = pdTRUE;
++#else
++	#error "Invalid configUSE_TASK_FPU_SUPPORT setting."
++#endif
++
++	return pxTopOfStack;
++}
++
++/*-----------------------------------------------------------*/
++
++BaseType_t xPortStartScheduler(void)
++{
++	uint32_t ulAPSR;
++
++	__asm__ volatile ("MRS %0, CurrentEL" : "=r" (ulAPSR));
++	ulAPSR &= portAPSR_MODE_BITS_MASK;
++
++	/* Support EL1, EL2, and EL3 */
++	if (ulAPSR == portEL1 || ulAPSR == 0x08 /* EL2 */ || ulAPSR == 0x0c /* EL3 */) {
++		/* Enable GICv3 system register interface */
++		write_icc_sre_el1(0x7);
++		__asm__ volatile ("isb" ::: "memory");
++
++		/* Set priority mask to allow all interrupts */
++		write_icc_pmr_el1(portUNMASK_VALUE);
++
++		/* Enable Group 1 interrupts */
++		write_icc_igrpen1_el1(0x1);
++		__asm__ volatile ("isb" ::: "memory");
++
++		/* Disable interrupts while starting scheduler */
++		portDISABLE_INTERRUPTS();
++
++		/* Start the tick timer */
++		configSETUP_TICK_INTERRUPT();
++
++		vPortLogSchedulerStartState();
++
++		/* Start the first task */
++		vPortRestoreTaskContext();
++	}
++
++	return 0;
++}
++
++/*-----------------------------------------------------------*/
++
++void vPortEndScheduler(void)
++{
++	configASSERT(ullCriticalNesting == 1000ULL);
++}
++
++/*-----------------------------------------------------------*/
++
++void vPortEnterCritical(void)
++{
++	uxPortSetInterruptMask();
++	ullCriticalNesting++;
++
++	if (ullCriticalNesting == 1ULL) {
++		configASSERT(ullPortInterruptNesting == 0);
++	}
++}
++
++/*-----------------------------------------------------------*/
++
++void vPortExitCritical(void)
++{
++	if (ullCriticalNesting > portNO_CRITICAL_NESTING) {
++		ullCriticalNesting--;
++		if (ullCriticalNesting == portNO_CRITICAL_NESTING) {
++			vPortClearInterruptMask(pdFALSE);
++		}
++	}
++}
++
++/*-----------------------------------------------------------*/
++
++static void portCLEAR_INTERRUPT_MASK_fn(void)
++{
++	portDISABLE_INTERRUPTS();
++	write_icc_pmr_el1(portUNMASK_VALUE);
++	__asm__ volatile ("dsb sy\n isb sy\n" ::: "memory");
++	portENABLE_INTERRUPTS();
++}
++
++void FreeRTOS_Tick_Handler(void)
++{
++	/* Set interrupt mask before altering scheduler structures */
++	portDISABLE_INTERRUPTS();
++	write_icc_pmr_el1((uint32_t)(configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT));
++	__asm__ volatile ("dsb sy\n isb sy\n" ::: "memory");
++
++	/* Clear tick interrupt source */
++	configCLEAR_TICK_INTERRUPT();
++	portENABLE_INTERRUPTS();
++
++	/* Increment RTOS tick */
++	if (xTaskIncrementTick() != pdFALSE) {
++		ullPortYieldRequired = pdTRUE;
++	}
++
++	/* Restore interrupt mask */
++	portCLEAR_INTERRUPT_MASK_fn();
++}
++
++/*-----------------------------------------------------------*/
++
++void vPortClearInterruptMask(UBaseType_t uxNewMaskValue)
++{
++	if (uxNewMaskValue == pdFALSE) {
++		portCLEAR_INTERRUPT_MASK_fn();
++	}
++}
++
++/*-----------------------------------------------------------*/
++
++UBaseType_t uxPortSetInterruptMask(void)
++{
++	uint32_t ulReturn;
++
++	portDISABLE_INTERRUPTS();
++
++	if (read_icc_pmr_el1() == (uint32_t)(configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT)) {
++		ulReturn = pdTRUE;
++	} else {
++		ulReturn = pdFALSE;
++		write_icc_pmr_el1((uint32_t)(configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT));
++		__asm__ volatile ("dsb sy\n isb sy\n" ::: "memory");
++	}
++
++	portENABLE_INTERRUPTS();
++	return ulReturn;
++}
++
++/*-----------------------------------------------------------*/
++
++void vPortTaskUsesFPU(void)
++{
++	ullPortTaskHasFPUContext = pdTRUE;
++}
++
++/*-----------------------------------------------------------*/
++
++#if (configASSERT_DEFINED == 1)
++void vPortValidateInterruptPriority(void)
++{
++	configASSERT(read_icc_rpr_el1() >= (uint32_t)(configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT));
++	configASSERT((read_icc_bpr0_el1() & portBINARY_POINT_BITS) <= portMAX_BINARY_POINT_VALUE);
++}
++#endif
+diff --git a/src/freertos_aarch64_orangepi/src/port/portASM.S b/src/freertos_aarch64_orangepi/src/port/portASM.S
+new file mode 100644
+index 0000000000000000000000000000000000000000..71161755f37415e27f214a405a324d2f9b92fbf6
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/port/portASM.S
+@@ -0,0 +1,377 @@
++/*
++ * FreeRTOS AArch64 port for RK3588 (GICv3 system register interface)
++ *
++ * Context switching and interrupt handling for ARMv8-A with GICv3.
++ * Uses ICC_*_EL1 system registers for GIC access.
++ *
++ * Context layout on each task's SP_EL0 stack (from top/low addr to bottom/high addr):
++ *   FPU flag
++ *   critical nesting
++ *   SPSR_EL1, ELR_EL1
++ *   X30, XZR
++ *   X28, X29
++ *   ...
++ *   X2, X3
++ *   X0, X1          (task's actual register values)
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++.text
++.arch armv8-a
++
++.extern ullCriticalNesting
++.extern ullPortTaskHasFPUContext
++.extern ullPortYieldRequired
++.extern ullPortInterruptNesting
++.extern pxCurrentTCB
++.extern vTaskIncrementTick
++.extern vTaskSwitchContext
++.extern vApplicationIRQHandler
++.extern FreeRTOS_Tick_Handler
++
++.extern ullICCIARValue
++
++/* GICv3 EL1 Physical Timer interrupt ID (PPI 30) */
++.equ TIMER_EL1_IRQ, 30
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Save FPU registers (Q0-Q31 = 32 x 128-bit) to the task stack.
++ * Assumes x0 points to the save area.
++ */
++.macro savefloatregisters
++    stp     q0, q1, [x0], #32
++    stp     q2, q3, [x0], #32
++    stp     q4, q5, [x0], #32
++    stp     q6, q7, [x0], #32
++    stp     q8, q9, [x0], #32
++    stp     q10, q11, [x0], #32
++    stp     q12, q13, [x0], #32
++    stp     q14, q15, [x0], #32
++    stp     q16, q17, [x0], #32
++    stp     q18, q19, [x0], #32
++    stp     q20, q21, [x0], #32
++    stp     q22, q23, [x0], #32
++    stp     q24, q25, [x0], #32
++    stp     q26, q27, [x0], #32
++    stp     q28, q29, [x0], #32
++    stp     q30, q31, [x0], #32
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Restore FPU registers from the task stack.
++ * Assumes x0 points to the save area.
++ */
++.macro restorefloatregisters
++    ldp     q0, q1, [x0], #32
++    ldp     q2, q3, [x0], #32
++    ldp     q4, q5, [x0], #32
++    ldp     q6, q7, [x0], #32
++    ldp     q8, q9, [x0], #32
++    ldp     q10, q11, [x0], #32
++    ldp     q12, q13, [x0], #32
++    ldp     q14, q15, [x0], #32
++    ldp     q16, q17, [x0], #32
++    ldp     q18, q19, [x0], #32
++    ldp     q20, q21, [x0], #32
++    ldp     q22, q23, [x0], #32
++    ldp     q24, q25, [x0], #32
++    ldp     q26, q27, [x0], #32
++    ldp     q28, q29, [x0], #32
++    ldp     q30, q31, [x0], #32
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Save all general purpose registers except x0 and x1.
++ * Assumes x1 points to the top of the stack.
++ */
++.macro saveallgpregisters
++    /* x0 and x1 are saved separately before this macro */
++    stp     x2, x3, [x1, #-16]!
++    stp     x4, x5, [x1, #-16]!
++    stp     x6, x7, [x1, #-16]!
++    stp     x8, x9, [x1, #-16]!
++    stp     x10, x11, [x1, #-16]!
++    stp     x12, x13, [x1, #-16]!
++    stp     x14, x15, [x1, #-16]!
++    stp     x16, x17, [x1, #-16]!
++    stp     x18, x19, [x1, #-16]!
++    stp     x20, x21, [x1, #-16]!
++    stp     x22, x23, [x1, #-16]!
++    stp     x24, x25, [x1, #-16]!
++    stp     x26, x27, [x1, #-16]!
++    stp     x28, x29, [x1, #-16]!
++    stp     x30, xzr, [x1, #-16]!
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Restore all general purpose registers.
++ * Assumes x1 points to the bottom of the saved register area.
++ */
++.macro restoreallgpregisters
++    ldp     x30, xzr, [x1], #16
++    ldp     x28, x29, [x1], #16
++    ldp     x26, x27, [x1], #16
++    ldp     x24, x25, [x1], #16
++    ldp     x22, x23, [x1], #16
++    ldp     x20, x21, [x1], #16
++    ldp     x18, x19, [x1], #16
++    ldp     x16, x17, [x1], #16
++    ldp     x14, x15, [x1], #16
++    ldp     x12, x13, [x1], #16
++    ldp     x10, x11, [x1], #16
++    ldp     x8, x9, [x1], #16
++    ldp     x6, x7, [x1], #16
++    ldp     x4, x5, [x1], #16
++    ldp     x2, x3, [x1], #16
++    ldp     x0, x1, [x1], #16
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Save the current task context to the task stack (SP_EL0).
++ */
++.macro portSAVE_CONTEXT
++    /* Switch to use the EL0 stack pointer. */
++    msr     SPSEL, #0
++
++    /* Save the full general-purpose register state. */
++    stp     x0, x1, [sp, #-0x10]!
++    stp     x2, x3, [sp, #-0x10]!
++    stp     x4, x5, [sp, #-0x10]!
++    stp     x6, x7, [sp, #-0x10]!
++    stp     x8, x9, [sp, #-0x10]!
++    stp     x10, x11, [sp, #-0x10]!
++    stp     x12, x13, [sp, #-0x10]!
++    stp     x14, x15, [sp, #-0x10]!
++    stp     x16, x17, [sp, #-0x10]!
++    stp     x18, x19, [sp, #-0x10]!
++    stp     x20, x21, [sp, #-0x10]!
++    stp     x22, x23, [sp, #-0x10]!
++    stp     x24, x25, [sp, #-0x10]!
++    stp     x26, x27, [sp, #-0x10]!
++    stp     x28, x29, [sp, #-0x10]!
++    stp     x30, xzr, [sp, #-0x10]!
++
++    /* Save exception state. */
++    mrs     x3, SPSR_EL1
++    mrs     x2, ELR_EL1
++    stp     x2, x3, [sp, #-0x10]!
++
++    /* Save critical nesting and FPU indicator. */
++    ldr     x0, =ullCriticalNesting
++    ldr     x3, [x0]
++    ldr     x0, =ullPortTaskHasFPUContext
++    ldr     x2, [x0]
++
++    cbz     x2, 1f
++    stp     q0, q1, [sp, #-0x20]!
++    stp     q2, q3, [sp, #-0x20]!
++    stp     q4, q5, [sp, #-0x20]!
++    stp     q6, q7, [sp, #-0x20]!
++    stp     q8, q9, [sp, #-0x20]!
++    stp     q10, q11, [sp, #-0x20]!
++    stp     q12, q13, [sp, #-0x20]!
++    stp     q14, q15, [sp, #-0x20]!
++    stp     q16, q17, [sp, #-0x20]!
++    stp     q18, q19, [sp, #-0x20]!
++    stp     q20, q21, [sp, #-0x20]!
++    stp     q22, q23, [sp, #-0x20]!
++    stp     q24, q25, [sp, #-0x20]!
++    stp     q26, q27, [sp, #-0x20]!
++    stp     q28, q29, [sp, #-0x20]!
++    stp     q30, q31, [sp, #-0x20]!
++1:
++    stp     x2, x3, [sp, #-0x10]!
++
++    /* Save the new task-stack top in the TCB. */
++    ldr     x0, =pxCurrentTCB
++    ldr     x1, [x0]
++    mov     x0, sp
++    str     x0, [x1]
++
++    /* Switch back to the EL1 exception stack. */
++    msr     SPSEL, #1
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * Restore a task context from the task stack (SP_EL0).
++ */
++.macro portRESTORE_CONTEXT
++    /* Switch to use the EL0 stack pointer. */
++    msr     SPSEL, #0
++
++    /* Set SP to the task stack recorded in the TCB. */
++    ldr     x0, =pxCurrentTCB
++    ldr     x1, [x0]
++    ldr     x0, [x1]
++    mov     sp, x0
++
++    /* Restore critical nesting and FPU indicator. */
++    ldp     x2, x3, [sp], #0x10
++
++    /* Program PMR according to the restored critical nesting depth. */
++    mov     x1, #255
++    cmp     x3, #0
++    b.eq    1f
++    ldr     x6, =ullMaxAPIPriorityMask
++    ldr     x1, [x6]
++1:
++    msr     ICC_PMR_EL1, x1
++    dsb     sy
++    isb     sy
++
++    ldr     x0, =ullCriticalNesting
++    str     x3, [x0]
++    ldr     x0, =ullPortTaskHasFPUContext
++    str     x2, [x0]
++
++    cbz     x2, 2f
++    ldp     q30, q31, [sp], #0x20
++    ldp     q28, q29, [sp], #0x20
++    ldp     q26, q27, [sp], #0x20
++    ldp     q24, q25, [sp], #0x20
++    ldp     q22, q23, [sp], #0x20
++    ldp     q20, q21, [sp], #0x20
++    ldp     q18, q19, [sp], #0x20
++    ldp     q16, q17, [sp], #0x20
++    ldp     q14, q15, [sp], #0x20
++    ldp     q12, q13, [sp], #0x20
++    ldp     q10, q11, [sp], #0x20
++    ldp     q8, q9, [sp], #0x20
++    ldp     q6, q7, [sp], #0x20
++    ldp     q4, q5, [sp], #0x20
++    ldp     q2, q3, [sp], #0x20
++    ldp     q0, q1, [sp], #0x20
++2:
++    /* Restore exception state. */
++    ldp     x2, x3, [sp], #0x10
++
++    msr     ELR_EL1, x2
++    msr     SPSR_EL1, x3
++
++    /* Restore general-purpose registers. */
++    ldp     x30, xzr, [sp], #0x10
++    ldp     x28, x29, [sp], #0x10
++    ldp     x26, x27, [sp], #0x10
++    ldp     x24, x25, [sp], #0x10
++    ldp     x22, x23, [sp], #0x10
++    ldp     x20, x21, [sp], #0x10
++    ldp     x18, x19, [sp], #0x10
++    ldp     x16, x17, [sp], #0x10
++    ldp     x14, x15, [sp], #0x10
++    ldp     x12, x13, [sp], #0x10
++    ldp     x10, x11, [sp], #0x10
++    ldp     x8, x9, [sp], #0x10
++    ldp     x6, x7, [sp], #0x10
++    ldp     x4, x5, [sp], #0x10
++    ldp     x2, x3, [sp], #0x10
++    ldp     x0, x1, [sp], #0x10
++
++    msr     SPSEL, #1
++    eret
++.endm
++
++/*-----------------------------------------------------------*/
++
++/*
++ * FreeRTOS_SWI_Handler - handles synchronous yields triggered by SVC.
++ * Tasks execute in EL1t using SP_EL0, so a software interrupt is required
++ * to enter exception context before SPSR_EL1/ELR_EL1 can be saved.
++ */
++.global FreeRTOS_SWI_Handler
++FreeRTOS_SWI_Handler:
++    portSAVE_CONTEXT
++
++    mrs     x0, ESR_EL1
++    lsr     x1, x0, #26
++    cmp     x1, #0x15              /* EC = SVC64 */
++    b.ne    .
++
++    bl      vTaskSwitchContext
++    portRESTORE_CONTEXT
++
++/*-----------------------------------------------------------*/
++
++/*
++ * vPortYield - raise an SVC to request a context switch.
++ */
++.global vPortYield
++vPortYield:
++    svc     #0
++    ret
++
++/*-----------------------------------------------------------*/
++
++/*
++ * FreeRTOS_IRQ_Handler - called when an IRQ occurs.
++ * Uses GICv3 system register interface (ICC_IAR1_EL1 / ICC_EOIR1_EL1).
++ */
++.global FreeRTOS_IRQ_Handler
++FreeRTOS_IRQ_Handler:
++    /* Save context */
++    portSAVE_CONTEXT
++
++    /* Increment nesting count */
++    ldr     x0, =ullPortInterruptNesting
++    ldr     x1, [x0]
++    add     x1, x1, #1
++    str     x1, [x0]
++
++    /* Read interrupt ID from GICv3 (system register) */
++    mrs     x0, ICC_IAR1_EL1
++    dsb     sy
++
++    /* Store the IRQ ID for the C handler */
++    ldr     x1, =ullICCIARValue
++    str     x0, [x1]
++
++    /* Call the application IRQ handler with the IRQ ID */
++    bl      vApplicationIRQHandler
++
++    /* Acknowledge the interrupt with GIC after servicing the source */
++    ldr     x1, =ullICCIARValue
++    ldr     x0, [x1]
++    msr     ICC_EOIR1_EL1, x0
++    isb
++
++    /* Decrement nesting count */
++    ldr     x0, =ullPortInterruptNesting
++    ldr     x1, [x0]
++    sub     x1, x1, #1
++    str     x1, [x0]
++
++    /* Check if context switch is needed */
++    ldr     x0, =ullPortYieldRequired
++    ldr     x1, [x0]
++    cbz     x1, 1f
++    mov     x2, #0
++    str     x2, [x0]
++    bl      vTaskSwitchContext
++
++1:
++    portRESTORE_CONTEXT
++
++/*-----------------------------------------------------------*/
++
++/*
++ * vPortRestoreTaskContext - start the first task.
++ */
++.global vPortRestoreTaskContext
++vPortRestoreTaskContext:
++    portRESTORE_CONTEXT
++
++/*-----------------------------------------------------------*/
++
++.end
+diff --git a/src/freertos_aarch64_orangepi/src/port/portmacro.h b/src/freertos_aarch64_orangepi/src/port/portmacro.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..205152e3df4466eafb7cb39538fd75b601fcd3e7
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/port/portmacro.h
+@@ -0,0 +1,116 @@
++/*
++ * FreeRTOS AArch64 port for RK3588 (GICv3 system register interface)
++ *
++ * Adapted from FreeRTOS-Kernel portable/GCC/ARM_AARCH64/portmacro.h
++ * Modified to use GICv3 ICC_*_EL1 system registers instead of MMIO.
++ *
++ * SPDX-License-Identifier: MIT
++ */
++
++#ifndef PORTMACRO_H
++#define PORTMACRO_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#include <stdint.h>
++
++/*-----------------------------------------------------------
++ * Port specific definitions
++ *----------------------------------------------------------*/
++
++/* Type definitions - must match standard FreeRTOS expectations */
++typedef long BaseType_t;
++typedef unsigned long UBaseType_t;
++typedef uint64_t StackType_t;
++
++#if configUSE_16_BIT_TICKS == 1
++    typedef uint16_t TickType_t;
++    #define portMAX_DELAY    ( ( TickType_t ) 0xffff )
++#else
++    typedef uint32_t TickType_t;
++    #define portMAX_DELAY    ( ( TickType_t ) 0xffffffffUL )
++#endif
++
++#define portSTACK_TYPE              uint64_t
++#define portBASE_TYPE               long
++#define portUBASE_TYPE              unsigned long
++
++/* Architecture specifics */
++#define portSTACK_GROWTH            ( -1 )
++#define portTICK_PERIOD_MS          ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
++#define portBYTE_ALIGNMENT          16
++#define portNOP()                   __asm__ volatile ( "NOP" )
++
++/* 8-bit and 16-bit max values */
++#define portMAX_8_BIT_VALUE         ( ( uint8_t ) 0xff )
++#define portMAX_16_BIT_VALUE        ( ( uint16_t ) 0xffff )
++#define portMAX_32_BIT_VALUE        ( ( uint32_t ) 0xffffffffUL )
++
++/* GICv3 priority shift */
++#define portPRIORITY_SHIFT          0
++
++/* Priority definitions for GICv3 */
++#define portLOWEST_USABLE_INTERRUPT_PRIORITY   ( configUNIQUE_INTERRUPT_PRIORITIES - 1 )
++#define portLOWEST_INTERRUPT_PRIORITY          ( 255 )
++
++/* Critical section management */
++#define portDISABLE_INTERRUPTS()               \
++{                                              \
++    __asm__ volatile ( "MSR DAIFSET, #2" ::: "memory" ); \
++    __asm__ volatile ( "DSB SY" ::: "memory" ); \
++    __asm__ volatile ( "ISB SY" ::: "memory" ); \
++}
++
++#define portENABLE_INTERRUPTS()                \
++{                                              \
++    __asm__ volatile ( "MSR DAIFCLR, #2" ::: "memory" ); \
++    __asm__ volatile ( "ISB SY" ::: "memory" ); \
++}
++
++/* Enter/exit critical sections */
++extern void vPortEnterCritical(void);
++extern void vPortExitCritical(void);
++#define portENTER_CRITICAL()                   vPortEnterCritical()
++#define portEXIT_CRITICAL()                    vPortExitCritical()
++
++/* Set/clear interrupt mask (for FromISR variants) */
++extern UBaseType_t uxPortSetInterruptMask(void);
++extern void vPortClearInterruptMask(UBaseType_t uxNewMaskValue);
++#define portSET_INTERRUPT_MASK_FROM_ISR()      uxPortSetInterruptMask()
++#define portCLEAR_INTERRUPT_MASK_FROM_ISR(x)   vPortClearInterruptMask(x)
++
++/* Task function macros */
++#define portTASK_FUNCTION(vFunction, pvParameters) void vFunction(void *pvParameters)
++#define portTASK_FUNCTION_PROTO(vFunction, pvParameters) void vFunction(void *pvParameters)
++
++/* Task selection */
++#if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
++    #define portRECORD_READY_PRIORITY(uxPriority, uxReadyPriorities) \
++        (uxReadyPriorities) |= (1UL << (uxPriority))
++    #define portRESET_READY_PRIORITY(uxPriority, uxReadyPriorities) \
++        (uxReadyPriorities) &= ~(1UL << (uxPriority))
++    #define portGET_HIGHEST_PRIORITY(uxTopPriority, uxReadyPriorities) \
++        uxTopPriority = (31 - __builtin_clz(uxReadyPriorities))
++#endif
++
++/* Yield */
++extern uint64_t ullPortYieldRequired;
++extern void vPortYield(void);
++#define portYIELD()                 __asm__ volatile ( "svc #0" ::: "memory" )
++#define portYIELD_WITHIN_API()      portYIELD()
++#define portEND_SWITCHING_ISR(x)    do { if ((x) != pdFALSE) { ullPortYieldRequired = pdTRUE; } } while (0)
++
++/* Scheduler utilities */
++extern void vPortRestoreTaskContext(void);
++#define portYIELD_FROM_ISR(x)       portEND_SWITCHING_ISR(x)
++
++/* Tick type properties */
++#define portTICK_TYPE_IS_ATOMIC     0
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* PORTMACRO_H */
+diff --git a/src/freertos_aarch64_orangepi/src/startup_aarch64.S b/src/freertos_aarch64_orangepi/src/startup_aarch64.S
+new file mode 100644
+index 0000000000000000000000000000000000000000..6d71473d01a38689a39ffdfce2311afd19fbc080
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/startup_aarch64.S
+@@ -0,0 +1,231 @@
++/*
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * AArch64 startup code for RK3588 FreeRTOS benchmark.
++ * Runs bare-metal on one Cortex-A76 core in AMP mode.
++ *
++ * Exception vector table layout (each entry 0x80 bytes apart):
++ *   +0x000: Synchronous (Current EL, SP0)
++ *   +0x080: IRQ        (Current EL, SP0)
++ *   +0x100: FIQ        (Current EL, SP0)
++ *   +0x180: SError     (Current EL, SP0)
++ *   +0x200: Synchronous (Current EL, SPx)
++ *   +0x280: IRQ        (Current EL, SPx) <-- FreeRTOS uses this
++ *   +0x300: FIQ        (Current EL, SPx)
++ *   +0x380: SError     (Current EL, SPx)
++ */
++
++.section .text.boot
++.global Reset_Handler
++.global _vector_table
++
++.extern FreeRTOS_IRQ_Handler
++.extern FreeRTOS_SWI_Handler
++.extern vPortUnexpectedSyncException
++.extern vPortUnexpectedFiqException
++.extern vPortUnexpectedSErrorException
++
++/*
++ * Exception vector table for EL1.
++ * Each entry is 0x80 bytes (max 32 instructions).
++ */
++.align 11
++_vector_table:
++    /* Current EL with SP0 - tasks run in EL1t, so yield/IRQ arrive here */
++    b   Sync_Handler               /* +0x000 Synchronous */
++    .align 7
++    b   FreeRTOS_IRQ_Handler       /* +0x080 IRQ */
++    .align 7
++    b   Fiq_Handler                /* +0x100 FIQ */
++    .align 7
++    b   SError_Handler             /* +0x180 SError */
++    .align 7
++
++    /* Current EL with SPx - keep these routed too for debug/bring-up */
++    b   Sync_Handler               /* +0x200 Synchronous */
++    .align 7
++    b   FreeRTOS_IRQ_Handler       /* +0x280 IRQ */
++    .align 7
++    b   Fiq_Handler                /* +0x300 FIQ */
++    .align 7
++    b   SError_Handler             /* +0x380 SError */
++    .align 7
++
++    /* Lower EL using AArch64 - not used in bare metal */
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++
++    /* Lower EL using AArch32 - not used */
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++    b   hang
++    .align 7
++
++
++/*
++ * Reset handler - entry point for secondary core boot.
++ */
++.align 3
++Reset_Handler:
++    /* Check current EL */
++    mrs     x0, CurrentEL
++    lsr     x0, x0, #2
++    cmp     x0, #3
++    b.eq    el3_start
++    cmp     x0, #2
++    b.eq    el2_start
++    b       el1_start
++
++el3_start:
++    /* Running at EL3 - drop to EL1 */
++    msr     sctlr_el1, xzr
++    isb
++
++    ldr     x0, =_vector_table
++    msr     vbar_el1, x0
++    mov     x0, #0x80000000  /* EL1 executes AArch64 when entered below EL2 */
++    msr     hcr_el2, x0
++
++    /* Allow EL1 to access physical timer and counter */
++    mov     x0, #0x3         /* EL1PCTEN | EL1PCEN */
++    msr     cnthctl_el2, x0
++
++    mov     x0, #0x401       /* NS|RW: non-secure AArch64 lower EL */
++    msr     scr_el3, x0
++
++    mov     x0, #0x3c5       /* DAIF masked, EL1h */
++    msr     spsr_el3, x0
++    adr     x0, el1_start
++    msr     elr_el3, x0
++    eret
++
++el2_start:
++    /* Running at EL2 (e.g. u-boot go) - drop to EL1 */
++    msr     sctlr_el1, xzr
++    isb
++
++    ldr     x0, =_vector_table
++    msr     vbar_el1, x0
++
++    /* Set HCR_EL2.RW so EL1 runs in AArch64 after eret */
++    mov     x0, #0x80000000
++    msr     hcr_el2, x0
++    isb
++
++    /* Allow EL1 to access physical timer and counter */
++    mov     x0, #0x3         /* EL1PCTEN | EL1PCEN */
++    msr     cnthctl_el2, x0
++
++    /* Return to EL1h with all interrupts masked */
++    mov     x0, #0x3c5       /* DAIF masked, EL1h (SP = SP_EL1) */
++    msr     spsr_el2, x0
++    adr     x0, el1_start
++    msr     elr_el2, x0
++    eret
++
++el1_start:
++    /* Running at EL1 */
++    ldr     x0, =_vector_table
++    msr     vbar_el1, x0
++    isb
++
++    /* Set up stack pointer */
++    ldr     x0, =_stack_top
++    mov     sp, x0
++
++    /* Clear BSS */
++    ldr     x0, =__bss_start
++    ldr     x1, =__bss_end
++    cmp     x0, x1
++    b.ge    2f
++    mov     x2, #0
++clear_bss:
++    str     x2, [x0], #8
++    cmp     x0, x1
++    b.lt    clear_bss
++
++2:
++    /* Invalidate caches before enabling */
++    ic      iallu
++    dsb     sy
++    isb
++
++    /* Enable I-Cache and branch prediction only.
++     * D-Cache requires MMU with proper page tables to mark device
++     * regions (GIC, UART) as Device-nGnRnE; without that, cached
++     * device-register accesses cause silent data corruption. */
++    mrs     x0, sctlr_el1
++    orr     x0, x0, #(1 << 12)   /* I:  Instruction Cache */
++    orr     x0, x0, #(1 << 11)   /* Z:  Branch Prediction */
++    msr     sctlr_el1, x0
++    isb
++
++    /* Jump to C entry point */
++    bl      main
++
++    /* Should not return */
++hang:
++    wfe
++    b       hang
++
++/*
++ * Route SVC to the FreeRTOS SWI handler, and dump other synchronous
++ * exceptions using the EL1 exception stack so task-stack faults are visible.
++ */
++.align 3
++Sync_Handler:
++    mrs     x0, ESR_EL1
++    lsr     x1, x0, #26
++    cmp     x1, #0x15              /* EC = SVC64 */
++    b.eq    FreeRTOS_SWI_Handler
++
++    msr     spsel, #1
++    mrs     x1, ELR_EL1
++    mrs     x2, FAR_EL1
++    mrs     x3, SPSR_EL1
++    bl      vPortUnexpectedSyncException
++    b       .
++
++.align 3
++Fiq_Handler:
++    msr     spsel, #1
++    mrs     x0, ESR_EL1
++    mrs     x1, ELR_EL1
++    mrs     x2, FAR_EL1
++    mrs     x3, SPSR_EL1
++    bl      vPortUnexpectedFiqException
++    b       .
++
++.align 3
++SError_Handler:
++    msr     spsel, #1
++    mrs     x0, ESR_EL1
++    mrs     x1, ELR_EL1
++    mrs     x2, FAR_EL1
++    mrs     x3, SPSR_EL1
++    bl      vPortUnexpectedSErrorException
++    b       .
++
++
++/*
++ * Stack area.
++ * Each benchmark task has its own stack via static allocation,
++ * but we need an initial stack for startup.
++ */
++.section .bss
++.align 12
++.global _stack_bottom
++_stack_bottom:
++    .skip   65536       /* 64 KB startup stack */
++.global _stack_top
++_stack_top:
+diff --git a/src/freertos_aarch64_orangepi/src/timer/bench_generic_timer.c b/src/freertos_aarch64_orangepi/src/timer/bench_generic_timer.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..de45fe3028cc6be497df890bb1a5376ba026b272
+--- /dev/null
++++ b/src/freertos_aarch64_orangepi/src/timer/bench_generic_timer.c
+@@ -0,0 +1,110 @@
++/* SPDX-License-Identifier: Apache-2.0 */
++
++/*
++ * Timer interrupt abstraction for benchmark interrupt latency tests.
++ * Uses the EL1 Physical Timer, which is the timer path already proven to
++ * reach the Orange Pi EL1 IRQ handler.
++ */
++
++#include "bench_api.h"
++#include "board_config.h"
++#include "gicv3.h"
++extern void FreeRTOS_Tick_Handler(void);
++
++static void freertos_tick_isr(void *arg)
++{
++	(void)arg;
++	FreeRTOS_Tick_Handler();
++}
++
++static bench_isr_handler_t timer_isr_handler = freertos_tick_isr;
++
++static inline uint64_t read_cntpct_el0(void)
++{
++	uint64_t val;
++	__asm__ volatile ("mrs %0, cntpct_el0" : "=r" (val));
++	return val;
++}
++
++static inline void write_cntp_tval_el0(uint64_t val)
++{
++	__asm__ volatile ("msr cntp_tval_el0, %0" :: "r" (val));
++	__asm__ volatile ("isb" ::: "memory");
++}
++
++static inline void write_cntp_ctl_el0(uint64_t val)
++{
++	__asm__ volatile ("msr cntp_ctl_el0, %0" :: "r" (val));
++	__asm__ volatile ("isb" ::: "memory");
++}
++
++void bench_exit_timer_isr(void)
++{
++	write_cntp_ctl_el0(0);
++}
++
++bench_isr_handler_t bench_timer_isr_get(void)
++{
++	return timer_isr_handler;
++}
++
++uint32_t bench_timer_cycles_per_second(void)
++{
++	return TIMER_FREQ;
++}
++
++uint32_t bench_timer_cycles_per_tick(void)
++{
++	return (bench_timer_cycles_per_second() / configTICK_RATE_HZ);
++}
++
++/*
++ * Set a new timer ISR handler.
++ * On AArch64 with GICv3, we store the handler and enable the timer IRQ.
++ */
++void bench_timer_isr_set(bench_isr_handler_t handler)
++{
++	timer_isr_handler = (handler != NULL) ? handler : freertos_tick_isr;
++
++	/* Enable the physical timer IRQ used by both the tick and the benchmark. */
++	gicv3_enable_interrupt(TIMER_EL1_IRQ);
++	gicv3_set_priority(TIMER_EL1_IRQ, configMAX_API_CALL_INTERRUPT_PRIORITY);
++}
++
++bench_time_t bench_timer_cycles_diff(bench_time_t trigger_point,
++				     bench_time_t sample_point)
++{
++	return (sample_point - trigger_point);
++}
++
++bench_time_t bench_timer_cycles_get(void)
++{
++	return (bench_time_t)read_cntpct_el0();
++}
++
++bench_time_t bench_timer_isr_expiry_set(uint32_t usec)
++{
++	uint64_t cycles_per_usec = (TIMER_FREQ + 999999) / 1000000;
++	uint64_t cycles = cycles_per_usec * usec;
++	uint64_t trigger = read_cntpct_el0() + cycles;
++
++	/* Disable timer */
++	write_cntp_ctl_el0(0);
++
++	/* Set the timer value */
++	write_cntp_tval_el0(cycles);
++
++	/* Enable timer with IRQ unmasked */
++	write_cntp_ctl_el0(0x1);
++
++	return (bench_time_t)trigger;
++}
++
++void bench_timer_isr_restore(bench_isr_handler_t handler)
++{
++	timer_isr_handler = (handler != NULL) ? handler : freertos_tick_isr;
++
++	/* Re-arm the shared physical timer for the normal FreeRTOS tick. */
++	write_cntp_tval_el0(bench_timer_cycles_per_tick());
++	write_cntp_ctl_el0(0x1);
++}

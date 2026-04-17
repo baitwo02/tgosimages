@@ -1,0 +1,9 @@
+**/IMAGES/
+**/build/
+**/release/
+**/tmp/
+**/guest/
+**/root/
+
+/target
+.axconfig.toml

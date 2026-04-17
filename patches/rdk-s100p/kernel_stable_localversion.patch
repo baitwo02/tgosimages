@@ -1,0 +1,16 @@
+diff --git a/mk_kernel.sh b/mk_kernel.sh
+--- a/mk_kernel.sh
++++ b/mk_kernel.sh
+@@ -21,7 +21,11 @@ source "${DEFAULT_CONFIG}"
+ if [ -f "${HR_LOCAL_DIR}"/VERSION ];then
+	rdk_sdk_ver="$(cat "${HR_LOCAL_DIR}"/VERSION)"
+	rdk_sdk_ver_xyz=${rdk_sdk_ver%%-*}
+-	LOCALVERSION="-DR-${rdk_sdk_ver_xyz}-$(date +%y%m%d%H%M)"
++	if [ "${RDK_KERNEL_LOCALVERSION_MODE:-stable}" = "timestamp" ]; then
++		LOCALVERSION="-DR-${rdk_sdk_ver_xyz}-$(date +%y%m%d%H%M)"
++	else
++		LOCALVERSION="-DR-${rdk_sdk_ver_xyz}"
++	fi
+	export LOCALVERSION
+ fi
+ 

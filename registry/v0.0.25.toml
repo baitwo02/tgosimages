@@ -1,0 +1,208 @@
+# Guest image list for Axvisor (axvisor-guest v0.0.25)
+
+[[images]]
+name = "evm3588_arceos"
+version = "0.0.25"
+description = "ArceOS for EVM3588 development board"
+sha256 = "4ba827131504ad681419026094795f378bc77b8b93eb23793cfe0554f87ea70c"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/evm3588_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "evm3588_linux"
+version = "0.0.25"
+description = "Linux for EVM3588 development board"
+sha256 = "27ef2d7418ab5572081d5d780e021690051ccc4e0909cc7893148935954a1c73"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/evm3588_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "orangepi_arceos"
+version = "0.0.25"
+description = "ArceOS for Orange Pi development board"
+sha256 = "f31de6412a0f3ea54780c9691406091b095265c5e191d4beaf90a63cb4c71bb0"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/orangepi_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "orangepi_linux"
+version = "0.0.25"
+description = "Linux for Orange Pi development board"
+sha256 = "538a8301c6a63c539bcb2beb8a897a8ec8a4fd65d92d0aaf0ca5921b21694e22"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/orangepi_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "phytiumpi_arceos"
+version = "0.0.25"
+description = "ArceOS for Phytium Pi development board"
+sha256 = "39d84f30e0613ca3bf35f6f49343a1598fac49b9b515087c9418c9ef6e417423"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/phytiumpi_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "phytiumpi_linux"
+version = "0.0.25"
+description = "Linux for Phytium Pi development board"
+sha256 = "44222d0c311409b7b34f96fd7a584f33bcd05f0721241fbb1fd213c8818f8034"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/phytiumpi_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "phytiumpi_rtthread"
+version = "0.0.25"
+description = "RT-Thread for Phytium Pi development board"
+sha256 = "411242614fd57edccca78b7171c8160046e9cd3bf8776ff486d46212d0c601f7"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/phytiumpi_rtthread.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_aarch64_arceos"
+version = "0.0.25"
+description = "ArceOS for QEMU aarch64 virtualization"
+sha256 = "31b7114ae25168f72a29e3b3a7d91f61fb11b2f91e70608d929e772a2d3b514f"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_aarch64_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_aarch64_linux"
+version = "0.0.25"
+description = "Linux for QEMU aarch64 virtualization"
+sha256 = "83a8bf28a0a4dad23055d13952b76da3f03207e97dfd27631ce0d121209ad8bd"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_aarch64_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_aarch64_nimbos"
+version = "0.0.25"
+description = "NIMBOS for QEMU aarch64 virtualization"
+sha256 = "21af1239c96d2deb56e0111e052fd8b442f5e135071710a0bed3f3bbc1ae55f2"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_aarch64_nimbos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_riscv64_arceos"
+version = "0.0.25"
+description = "ArceOS for QEMU riscv64 virtualization"
+sha256 = "83b395cd7f7a9ecd4549b64abfcdfa64211d5efdb750b5d269be29dc8f0b1f5f"
+arch = "riscv64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_riscv64_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_riscv64_linux"
+version = "0.0.25"
+description = "Linux for QEMU riscv64 virtualization"
+sha256 = "263ace33027e529911bf468968c9887e1267ba018d4559dcd7c6f6817246e72e"
+arch = "riscv64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_riscv64_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_riscv64_nimbos"
+version = "0.0.25"
+description = "NIMBOS for QEMU riscv64 virtualization"
+sha256 = "d5001cb8d2e1192858a78c9e412b91ae7c12050c17880ac48607cf46466f52c9"
+arch = "riscv64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_riscv64_nimbos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_x86_64_arceos"
+version = "0.0.25"
+description = "ArceOS for QEMU x86_64 virtualization"
+sha256 = "7b76254e93ac0882976b84cec655ed784d6d86fe1006eb4478acf84a158e7ab2"
+arch = "x86_64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_x86_64_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_x86_64_linux"
+version = "0.0.25"
+description = "Linux for QEMU x86_64 virtualization"
+sha256 = "fcbbb07f3624c370df4b703d3d2862e56ad022b84558074ec6e2282844486d4e"
+arch = "x86_64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_x86_64_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "qemu_x86_64_nimbos"
+version = "0.0.25"
+description = "NIMBOS for QEMU x86_64 virtualization"
+sha256 = "766aee71072bed3a76fc29781cddd43d243228bd62144115b597f659d9ca8793"
+arch = "x86_64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/qemu_x86_64_nimbos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "rdk-s100p_arceos"
+version = "0.0.25"
+description = "ArceOS for RDK-S100P development board"
+sha256 = "e0c4ccf02e987e520d952e2e88103d75ed6fdc122c708dac392a58d126f20d9f"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/rdk-s100p_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "rdk-s100p_linux"
+version = "0.0.25"
+description = "Linux for RDK-S100P development board"
+sha256 = "a095d35f06045ed993704d5af934b0d1f5b7543fd6ef6274ff8ef8e8be1dd761"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/rdk-s100p_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "roc-rk3568-pc_arceos"
+version = "0.0.25"
+description = "ArceOS for ROC-RK3568-PC development board"
+sha256 = "d6533669b4cc1d17e4406d0c6986f58528196a450650a367b5820ba2186f6ab7"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/roc-rk3568-pc_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "roc-rk3568-pc_linux"
+version = "0.0.25"
+description = "Linux for ROC-RK3568-PC development board"
+sha256 = "782272ad5d8571dc5780b343a241f68ad7e958e35978e9167b64a4d75cc71636"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/roc-rk3568-pc_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "roc-rk3568-pc_rtthread"
+version = "0.0.25"
+description = "RT-Thread for ROC-RK3568-PC development board"
+sha256 = "633af0f83deb08df942c3a22c3125e86a36e16c0c1506ee648731fdc78f743da"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/roc-rk3568-pc_rtthread.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "tac-e400-plc_arceos"
+version = "0.0.25"
+description = "ArceOS for TAC-E400-PLC industrial control board"
+sha256 = "d30b7e3e0f148663a39946bb48c6426ea7771bac8105438c47b93e762015c0dd"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/tac-e400-plc_arceos.tar.gz"
+released_at = "2026-04-03T01:28:26Z"
+
+[[images]]
+name = "tac-e400-plc_linux"
+version = "0.0.25"
+description = "Linux for TAC-E400-PLC industrial control board"
+sha256 = "220798ae7987b9960bbec7d60522bacd5d0e700a9d21deaee2770436b31f031c"
+arch = "aarch64"
+url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.25/tac-e400-plc_linux.tar.gz"
+released_at = "2026-04-03T01:28:26Z"

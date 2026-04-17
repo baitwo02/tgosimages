@@ -1,0 +1,11 @@
+--- a/source/bootloader/uboot/arch/arm/mach-hobot/super/super_board.c
++++ b/source/bootloader/uboot/arch/arm/mach-hobot/super/super_board.c
+@@ -569,7 +569,7 @@ void board_bootargs_setup(void)
+ 		"hobotboot.serial=%s "
+ 		" %s %s",
+ 		console_args,
+-		env_get_ulong("loglevel", 10, 1), env_get("kernel_in_dev"),
++		env_get_ulong("loglevel", 10, 8), env_get("kernel_in_dev"),
+ 		hb_get_soc_name(), hb_get_hw_name(), hb_get_version(),
+ 		hb_get_pcie_mode(),
+ 		reason_name,

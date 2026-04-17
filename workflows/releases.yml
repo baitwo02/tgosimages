@@ -1,0 +1,54 @@
+name: Releases
+
+on:
+  workflow_dispatch:
+  # push:
+  #   tags:
+  #     - "v*.*.*"
+
+jobs:
+  build:
+    runs-on: [self-hosted, linux, dtlqc]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly-2025-05-20
+          components: rust-src, llvm-tools, clippy, rustfmt
+          targets: >
+            x86_64-unknown-none,
+            riscv64gc-unknown-none-elf,
+            aarch64-unknown-none-softfloat,
+            loongarch64-unknown-none-softfloat
+      - run: cargo install cargo-binutils
+      - name: Build for all platforms
+        run: |
+          set -e
+          ./build.sh qemu-x86_64
+          ./build.sh qemu-riscv64
+          ./build.sh qemu-aarch64
+          ./build.sh phytiumpi
+          ./build.sh tac-e400-plc
+        
+      - name: Prepare release files
+        id: release
+        run: ./build.sh release pack
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          files: ${{ steps.release.outputs.RELEASE_DIR }}/*
+          body: |
+            ## Guest images
+
+            This release includes build artifacts for the following platforms:
+            - QEMU (x86_64, RISC-V, AArch64, LoongArch)
+            - Phytium Pi
+            - ROC-RK3568-PC development board
+            - TAC-E400-PLC industrial controller
+
+            File naming convention: `arceos-{board}-{arch}-{config}.bin`
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          make_latest: true

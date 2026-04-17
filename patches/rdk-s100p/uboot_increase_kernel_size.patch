@@ -1,0 +1,9 @@
+--- a/source/bootloader/uboot/include/configs/hobot-s100.h
++++ b/source/bootloader/uboot/include/configs/hobot-s100.h
+@@ -199,3 +199,6 @@
+ #define BL31_DTB_ADDR IMAGE_BASE + 0xb000000
+
++/* Increase kernel image size limit for bootm */
++#define CONFIG_SYS_BOOTM_LEN		(64 << 20)	/* 64MB */
++
+ #endif

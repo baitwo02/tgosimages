@@ -1,0 +1,693 @@
+diff --git a/boards/phytium/phytiumpi_axvisor_guest/Kconfig.defconfig b/boards/phytium/phytiumpi_axvisor_guest/Kconfig.defconfig
+new file mode 100644
+index 0000000000000000000000000000000000000000..6e59bb3e02492534780e73a2bfc99fde8f4af775
+--- /dev/null
++++ b/boards/phytium/phytiumpi_axvisor_guest/Kconfig.defconfig
+@@ -0,0 +1,39 @@
++if BOARD_PHYTIUMPI_AXVISOR_GUEST
++
++config BUILD_OUTPUT_BIN
++	default y
++
++config MAIN_STACK_SIZE
++	default 4096
++
++config ARMV8_A_NS
++	default y
++
++config XIP
++	default n
++
++config FLASH_SIZE
++	default 0
++
++config FLASH_BASE_ADDRESS
++	default 0x0
++
++config SERIAL
++	default y
++
++config CONSOLE
++	default y
++
++config UART_CONSOLE
++	default y
++
++config UART_INTERRUPT_DRIVEN
++	default y
++
++config CACHE_MANAGEMENT
++	default y
++
++config TIMER_READS_ITS_FREQUENCY_AT_RUNTIME
++	default y
++
++endif # BOARD_PHYTIUMPI_AXVISOR_GUEST
+diff --git a/boards/phytium/phytiumpi_axvisor_guest/Kconfig.phytiumpi_axvisor_guest b/boards/phytium/phytiumpi_axvisor_guest/Kconfig.phytiumpi_axvisor_guest
+new file mode 100644
+index 0000000000000000000000000000000000000000..258f0b95d66c2255c031927773e74ac31c75f115
+--- /dev/null
++++ b/boards/phytium/phytiumpi_axvisor_guest/Kconfig.phytiumpi_axvisor_guest
+@@ -0,0 +1,2 @@
++config BOARD_PHYTIUMPI_AXVISOR_GUEST
++	select SOC_QEMU_CORTEX_A53
+diff --git a/boards/phytium/phytiumpi_axvisor_guest/board.yml b/boards/phytium/phytiumpi_axvisor_guest/board.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..80b5c89e805463b7c86879db9772dedec05bfdfc
+--- /dev/null
++++ b/boards/phytium/phytiumpi_axvisor_guest/board.yml
+@@ -0,0 +1,6 @@
++board:
++  name: phytiumpi_axvisor_guest
++  full_name: Phytium Pi AxVisor Guest
++  vendor: phytium
++  socs:
++  - name: qemu_cortex_a53
+diff --git a/boards/phytium/phytiumpi_axvisor_guest/phytiumpi_axvisor_guest.dts b/boards/phytium/phytiumpi_axvisor_guest/phytiumpi_axvisor_guest.dts
+new file mode 100644
+index 0000000000000000000000000000000000000000..c82ec487c466c91ce53df7eaa48330ceeaceaf5e
+--- /dev/null
++++ b/boards/phytium/phytiumpi_axvisor_guest/phytiumpi_axvisor_guest.dts
+@@ -0,0 +1,93 @@
++/dts-v1/;
++
++/ {
++	#address-cells = <2>;
++	#size-cells = <2>;
++	model = "Phytium Pi AxVisor Guest";
++	compatible = "phytium,pe2204", "phytium,phytiumpi-axvisor-guest";
++
++	psci {
++		compatible = "arm,psci-0.2";
++		method = "smc";
++	};
++
++	chosen {
++		zephyr,console = &uart0;
++		zephyr,shell-uart = &uart0;
++		zephyr,sram = &sram0;
++		zephyr,flash = &flash0;
++		stdout-path = "serial0:115200n8";
++	};
++
++	cpus {
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		cpu@0 {
++			device_type = "cpu";
++			compatible = "arm,cortex-a53";
++			reg = <0>;
++		};
++	};
++
++	timer {
++		compatible = "arm,armv8-timer";
++		interrupt-parent = <&gic>;
++		interrupts = <1 13 8 0>,
++			     <1 14 8 0>,
++			     <1 11 8 0>,
++			     <1 10 8 0>;
++		clock-frequency = <50000000>;
++	};
++
++	uartclk: apb-pclk {
++		compatible = "fixed-clock";
++		clock-frequency = <100000000>;
++		#clock-cells = <0>;
++	};
++
++	soc {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		compatible = "simple-bus";
++		ranges;
++		interrupt-parent = <&gic>;
++
++		gic: interrupt-controller@30800000 {
++			compatible = "arm,gic-v3", "arm,gic";
++			reg = <0x00 0x30800000 0x00 0x00020000>,
++			      <0x00 0x30880000 0x00 0x00080000>;
++			interrupt-controller;
++			#interrupt-cells = <4>;
++			#address-cells = <2>;
++			#size-cells = <2>;
++			status = "okay";
++		};
++
++		uart0: uart@2800d000 {
++			compatible = "arm,pl011";
++			reg = <0x00 0x2800d000 0x00 0x1000>;
++			interrupts = <0 84 4 0>;
++			interrupt-names = "irq_0";
++			clocks = <&uartclk>;
++			current-speed = <115200>;
++			status = "okay";
++		};
++
++		/*
++		 * Match AxVisor's guest RAM window on the Phytium Pi path so the
++		 * Zephyr image links directly into the guest physical address space.
++		 */
++		sram0: memory@2020000000 {
++			device_type = "memory";
++			compatible = "mmio-sram";
++			reg = <0x20 0x20000000 0x00 0x20000000>;
++		};
++
++		flash0: flash@0 {
++			compatible = "cfi-flash";
++			bank-width = <4>;
++			reg = <0x0 0x0 0x0 0x04000000>;
++		};
++	};
++};
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/Kconfig.orangepi_5_plus_rk3588 b/boards/xunlong/orangepi_5_plus_rk3588/Kconfig.orangepi_5_plus_rk3588
+new file mode 100644
+index 0000000000000000000000000000000000000000..5fe0a4a2005806b7ca9e16845d167efada93f06e
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/Kconfig.orangepi_5_plus_rk3588
+@@ -0,0 +1,5 @@
++# Copyright The Zephyr Project Contributors
++# SPDX-License-Identifier: Apache-2.0
++
++config BOARD_ORANGEPI_5_PLUS_RK3588
++	select SOC_RK3588
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/board.yml b/boards/xunlong/orangepi_5_plus_rk3588/board.yml
+new file mode 100644
+index 0000000000000000000000000000000000000000..f072237eacdf239cc66290eebd3dbb2d1740b3c9
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/board.yml
+@@ -0,0 +1,6 @@
++board:
++  name: orangepi_5_plus_rk3588
++  full_name: Orange Pi 5 Plus RK3588
++  vendor: xunlong
++  socs:
++  - name: rk3588
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/doc/index.rst b/boards/xunlong/orangepi_5_plus_rk3588/doc/index.rst
+new file mode 100644
+index 0000000000000000000000000000000000000000..1dace9af49c70072275373ccdbc571c2e204af2e
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/doc/index.rst
+@@ -0,0 +1,208 @@
++.. zephyr:board:: orangepi_5_plus_rk3588
++
++Overview
++********
++
++Orange Pi 5 Plus uses Rockchip RK3588, a new generation of octa-core 64-bit ARM
++processor, which includes quad-core A76 and quad-core A55. It adopts Samsung's 8nm
++LP process technology, with a large core frequency of up to 2.4GHz. It integrates ARM
++Mali-G610 MP4 GPU, embedded high-performance 3D and 2D image acceleration
++modules, built-in AI accelerator NPU with up to 6 Tops computing power,
++4GB/8GB/16GB (LPDDR4x/LPDDR5) memory, and has up to 8K display processing capabilities.
++
++Orange Pi 5 Plus introduces a wide range of interfaces, including dual HDMI output,
++HDMI input, Wi-Fi6, M.2 M-key PCIe3.0x4, 2.5G network port, USB2.0, USB3.0
++interface and 26pin expansion pin header, etc. It can be widely used in high-end tablets,
++edge computing, artificial intelligence, cloud computing, AR/VR, smart security, smart
++home and other fields, covering all industries of AIoT.
++
++Orange Pi 5 Plus supports Orange Pi OS, the official operating system developed by
++Orange Pi. It also supports operating systems such as Android 12, Debian11, Debian12,
++Ubuntu20.04 and Ubuntu22.04.
++
++Hardware
++********
++
++- Hardware Features:
++
++  - CPU:
++
++    - Rockchip RK3588(8nm LP process)
++
++    - 8-core 64-bit processor
++
++    - Quad-core Cortex-A76 and quad-core Cortex-A55 big and
++      small core architecture
++
++    - The main frequency of the big core is up to 2.4GHz, and
++      the main frequency of the small core is up to 1.8GHz
++
++  - GPU:
++
++    - Integrated ARM Mali-G610
++
++    - OpenGL ES1.1/2.0/3.2, OpenCL 2.2 and Vulkan 1.2
++
++  - NPU:
++
++    - Built-in AI accelerator NPU with up to 6 Tops computing
++      power
++
++    - Support INT4/INT8/INT16 mixed operations
++
++  - video:
++
++    - 2 * HDMI 2.1, Maximum support 8K @60Hz
++
++    - 1 * HDMI Input, up to 4K @60FPS
++
++    - 1 * MIPI D-PHY TX 4Lane
++
++  - Memory:
++
++    - 4GB/8GB/16GB(LPDDR4x/LPDDR5)
++
++  - Camera:
++
++    - 2 * MIPI CSI 4Lane
++
++    - 1 * MIPI D-PHY RX 4Lane
++
++  - PMU:
++
++    - RK806-1
++
++  - Onboard storage:
++
++    - eMMC socket, can be connected to external eMMC module
++
++    - 16MB QSPI Nor FLASH
++
++    - MicroSD(TF) Card Slot
++
++    - PCIe3.0x4 M.2 M-KEY(SSD) Slots
++
++  - Ethernet:
++
++    - 2 * PCIe 2.5G Ethernet port(RTL8125BG)
++
++  - WIFI+BT:
++
++    - Onboard Wi-Fi 6E+BT 5.3/BLE Modules: AP6275P
++
++    - Wi-Fi interface: SDIO3.0
++
++    - BT interface: UART/PCM
++
++  - Audio:
++
++    - 3.5mm Headphone jack Audio input/output
++
++    - Onboard MIC input
++
++    - 2 * HDMI Output
++
++  - PCIe M.2 M-KEY:
++
++    - PCIe 3.0 x 4 lanes, For connecting NVMe SSD
++
++  - USB interface:
++
++    - 1 * USB3.0 support Device or HOST model
++
++    - 1 * USB3.0 HOST
++
++    - 2 * USB2.0 HOST
++
++  - 26pin Extension pin header:
++
++    For expansion UART, PWM, I2C, SPI, CAN and GPIO interface
++
++  - Debug serial port:
++
++    Included in 26PIN expansion port
++
++  - LED Light:
++
++    Power LED and Status LED
++
++  - button:
++
++    - 1 * MaskROM Key
++
++    - 1 * Recovery button
++
++  - powered by:
++
++    Type-C Interface power supply 5V/5A
++
++Supported Features
++==================
++
++.. zephyr:board-supported-hw::
++
++There are multiple serial ports on the board: Zephyr is using
++uart2 as serial console.
++
++Programming and Debugging
++*************************
++
++.. zephyr:board-supported-runners::
++
++Use this configuration to run basic Zephyr applications and kernel tests,
++for example, with the :zephyr:code-sample:`hello_world` sample:
++
++.. zephyr-app-commands::
++  :zephyr-app: samples/hello_world
++  :host-os: unix
++  :board: orangepi_5_plus_rk3588
++  :goals: build
++
++This will build an image with the hello world sample app.
++
++Build the zephyr image:
++
++.. code-block:: console
++
++   mkimage -C none -A arm64 -O linux -a 0x10000000 -e 0x10000000 -d build/zephyr/zephyr.bin build/zephyr/zephyr.img
++
++Burn the image on the board:
++
++.. code-block:: console
++
++   dd bs=1M if=/dev/zero of=/dev/mmcblk1 count=1000 status=progress
++   dd bs=1M if=zephyr.img of=/dev/mmcblk1 status=progress
++
++Use U-Boot to load and run Zephyr:
++
++.. code-block:: console
++
++   mmc dev 1
++   mmc read 0x10000000 0x0 0x10000
++   bootm start 0x10000000
++   bootm loados
++   bootm go
++
++0x10000 is the size (in number of sectors) or your image. Increase it if needed.
++
++It will display the following console output:
++
++.. code-block:: console
++
++   *** Booting Zephyr OS build v4.2.0-455-gddc43f0d353d ***
++   Hello World! orangepi_5_plus_rk3588/rk3588
++
++Flashing
++========
++
++Zephyr image can be loaded in DDR memory at address 0x10000000 from SD Card,
++EMMC, QSPI Flash or downloaded from network in u-boot.
++
++References
++==========
++
++More information can refer to OrangePi official website:
++`OrangePi website`_.
++
++.. _OrangePi website:
++   http://www.orangepi.org/html/hardWare/computerAndMicrocontrollers/details/Orange-Pi-5-Plus.html
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.dts b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.dts
+new file mode 100644
+index 0000000000000000000000000000000000000000..828dd4c827b8535d2bc65aefd456f8832f02d4b9
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.dts
+@@ -0,0 +1,34 @@
++/*
++ * SPDX-License-Identifier: Apache-2.0
++ * Copyright The Zephyr Project Contributors
++ */
++
++/dts-v1/;
++
++#include <rockchip/rk3588.dtsi>
++#include <common/mem.h>
++
++/ {
++	model = "Xunlong Orange Pi 5 Plus";
++	compatible = "xunlong,orangepi-5-plus", "rockchip,rk3588";
++
++	chosen {
++		zephyr,sram = &sram0;
++		zephyr,console = &uart2;
++		zephyr,shell-uart = &uart2;
++	};
++
++	sram0: memory@40000000 {
++		device_type = "memory";
++		compatible = "mmio-sram";
++		reg = <0x40000000 DT_SIZE_G(1)>;
++	};
++};
++
++&uart2 {
++	status = "okay";
++};
++
++&gic {
++	status = "okay";
++};
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.yaml b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.yaml
+new file mode 100644
+index 0000000000000000000000000000000000000000..9818455ab36f13305dfa02d7121c5c658fc239b6
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588.yaml
+@@ -0,0 +1,12 @@
++identifier: orangepi_5_plus_rk3588
++name: Orange Pi 5 Plus RK3588
++type: mcu
++arch: arm64
++toolchain:
++  - zephyr
++  - cross-compile
++ram: 8096
++testing:
++  ignore_tags:
++    - net
++    - bluetooth
+diff --git a/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588_defconfig b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588_defconfig
+new file mode 100644
+index 0000000000000000000000000000000000000000..10865e992746104acdbba21bec9ae7db0d49b38f
+--- /dev/null
++++ b/boards/xunlong/orangepi_5_plus_rk3588/orangepi_5_plus_rk3588_defconfig
+@@ -0,0 +1,21 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright The Zephyr Project Contributors
++
++# Platform Configuration
++CONFIG_ARM_ARCH_TIMER=y
++CONFIG_CLOCK_CONTROL=y
++CONFIG_ARM64_VA_BITS_40=y
++CONFIG_ARM64_PA_BITS_40=y
++
++# Serial Drivers
++CONFIG_SERIAL=y
++CONFIG_UART_NS16550=y
++CONFIG_UART_INTERRUPT_DRIVEN=y
++
++# Enable console
++CONFIG_CONSOLE=y
++CONFIG_UART_CONSOLE=y
++
++# ARMv8 NS world with cache management
++CONFIG_ARMV8_A_NS=y
++CONFIG_CACHE_MANAGEMENT=y
+diff --git a/doc/axvisor/latency_measure.md b/doc/axvisor/latency_measure.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..b5a433788a8085d4cb3470d32642829d6a508452
+--- /dev/null
++++ b/doc/axvisor/latency_measure.md
+@@ -0,0 +1,48 @@
++## 构建zephyr镜像
++
++下面这条命令会基于 `/path/to/zephyr` 编译 `tests/benchmarks/latency_measure`：
++
++```bash
++export PATH=/tmp/zephyr-pyenv/bin:$PATH
++export ZEPHYR_BASE=/path/to/zephyr
++export ZEPHYR_SDK_INSTALL_DIR=/tmp/zephyr-sdk-1.0
++export CROSS_COMPILE=/path/to/zephyr-sdk-0.16.5-1/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-
++export CCACHE_DIR=/tmp/ccache
++export CCACHE_TEMPDIR=/tmp/ccache/tmp
++
++mkdir -p /tmp/zephyr-latency-build/Kconfig /tmp/zephyr-latency-build/zephyr
++
++(cd /path/to/zephyr && \
++  /tmp/zephyr-pyenv/bin/python scripts/zephyr_module.py \
++    --kconfig-out /tmp/zephyr-latency-build/Kconfig/Kconfig.modules \
++    --sysbuild-kconfig-out /tmp/zephyr-latency-build/Kconfig/Kconfig.sysbuild.modules \
++    --cmake-out /tmp/zephyr-latency-build/zephyr/zephyr_modules.txt \
++    --settings-out /tmp/zephyr-latency-build/zephyr/settings.txt \
++    -z /path/to/zephyr)
++
++cmake -GNinja \
++  -B /tmp/zephyr-latency-build \
++  -S /path/to/zephyr/tests/benchmarks/latency_measure \
++  -DBOARD=phytiumpi_axvisor_guest \
++  -DBOARD_ROOT=/path/to/zephyr-boards \
++  -DCONF_FILE=/path/to/zephyr-boards/phytiumpi_axvisor_guest.conf \
++  -DZEPHYR_TOOLCHAIN_VARIANT=cross-compile \
++  -DPython3_EXECUTABLE=/tmp/zephyr-pyenv/bin/python \
++  -DDTC=/usr/bin/dtc
++
++cmake --build /tmp/zephyr-latency-build
++```
++
++###  产物位置
++
++编译完成后，主要产物在：
++
++- `/tmp/zephyr-latency-build/zephyr/zephyr.bin`
++- `/tmp/zephyr-latency-build/zephyr/zephyr.elf`
++- `/tmp/zephyr-latency-build/zephyr/zephyr.dts`
++
++仓库里还保留了一份方便使用的拷贝：
++
++- [zephyr-phytiumpi-latency.bin](/path/to/tmp/zephyr-phytiumpi-latency.bin)
++- [zephyr-phytiumpi-latency.elf](/path/to/tmp/zephyr-phytiumpi-latency.elf)
++- [zephyr-phytiumpi-latency.dtb](/path/to/tmp/zephyr-phytiumpi-latency.dtb)
+diff --git a/tests/benchmarks/latency_measure/CMakeLists.txt b/tests/benchmarks/latency_measure/CMakeLists.txt
+index 9119d78050f0c0313d66f42122038791df6a7694..f2d24551e8d8937a8683fd339910382df34a969b 100644
+--- a/tests/benchmarks/latency_measure/CMakeLists.txt
++++ b/tests/benchmarks/latency_measure/CMakeLists.txt
+@@ -6,3 +6,6 @@ project(latency_measure)
+ 
+ FILE(GLOB app_sources src/*.c)
+ target_sources(app PRIVATE ${app_sources})
++target_include_directories(app PRIVATE
++  ${ZEPHYR_BASE}/subsys/testsuite/include
++)
+diff --git a/tests/benchmarks/latency_measure/Kconfig b/tests/benchmarks/latency_measure/Kconfig
+index 557d4df33f58b693060123becf53e2fa6a56d67f..ee6d45702a2656b83b286a6f3d7f605aedb886d5 100644
+--- a/tests/benchmarks/latency_measure/Kconfig
++++ b/tests/benchmarks/latency_measure/Kconfig
+@@ -8,3 +8,11 @@ source "Kconfig.zephyr"
+ config BENCHMARK_NUM_ITERATIONS
+ 	int "Number of iterations to gather data"
+ 	default 1000
++
++config BENCHMARK_SKIP_THREAD_YIELD
++	bool "Skip k_yield thread switch benchmarks"
++	default n
++
++config BENCHMARK_SKIP_INT_TO_THREAD
++	bool "Skip interrupt-to-thread latency benchmarks"
++	default n
+diff --git a/tests/benchmarks/latency_measure/boards/phytiumpi_axvisor_guest.conf b/tests/benchmarks/latency_measure/boards/phytiumpi_axvisor_guest.conf
+new file mode 100644
+index 0000000000000000000000000000000000000000..2273d5b9bbfe1e566c2d821bb22553586f9d8356
+--- /dev/null
++++ b/tests/benchmarks/latency_measure/boards/phytiumpi_axvisor_guest.conf
+@@ -0,0 +1,9 @@
++CONFIG_ARM64_VA_BITS_42=y
++CONFIG_ARM64_PA_BITS_42=y
++CONFIG_TEST=y
++CONFIG_QEMU_ICOUNT=n
++CONFIG_ARM_ARCH_TIMER=y
++CONFIG_TIMING_FUNCTIONS=y
++CONFIG_EVENTS=y
++CONFIG_IRQ_OFFLOAD=y
++CONFIG_HEAP_MEM_POOL_SIZE=16384
+diff --git a/tests/benchmarks/latency_measure/boards/qemu_cortex_a53.conf b/tests/benchmarks/latency_measure/boards/qemu_cortex_a53.conf
+new file mode 100644
+index 0000000000000000000000000000000000000000..aec73f049c95c1360212084d979f1f528a25e6eb
+--- /dev/null
++++ b/tests/benchmarks/latency_measure/boards/qemu_cortex_a53.conf
+@@ -0,0 +1,4 @@
++CONFIG_BENCHMARK_SKIP_THREAD_YIELD=y
++CONFIG_BENCHMARK_SKIP_INT_TO_THREAD=y
++CONFIG_QEMU_ICOUNT=n
++CONFIG_TIMER_READS_ITS_FREQUENCY_AT_RUNTIME=y
+diff --git a/tests/benchmarks/latency_measure/src/int_to_thread.c b/tests/benchmarks/latency_measure/src/int_to_thread.c
+index cb7ca72d32f6e3149f33abc4cc1179c30f5f493b..d71fae810182ea0ad7ff9f25bae68c3e52270fcb 100644
+--- a/tests/benchmarks/latency_measure/src/int_to_thread.c
++++ b/tests/benchmarks/latency_measure/src/int_to_thread.c
+@@ -23,6 +23,7 @@
+  */
+ 
+ #include <zephyr/kernel.h>
++#include <zephyr/timestamp.h>
+ #include "utils.h"
+ #include "timing_sc.h"
+ 
+diff --git a/tests/benchmarks/latency_measure/src/main.c b/tests/benchmarks/latency_measure/src/main.c
+index 8c492bc1f14d50f12240713a5fe790392e2f9324..1a2a28bf50a2fee196297bcf4038336a17de52eb 100644
+--- a/tests/benchmarks/latency_measure/src/main.c
++++ b/tests/benchmarks/latency_measure/src/main.c
+@@ -111,13 +111,17 @@ static void test_thread(void *arg1, void *arg2, void *arg3)
+ 
+ 	timestamp_overhead_init(CONFIG_BENCHMARK_NUM_ITERATIONS);
+ 
++#if !CONFIG_BENCHMARK_SKIP_THREAD_YIELD
+ 	/* Preemptive threads context switching */
+ 	thread_switch_yield(CONFIG_BENCHMARK_NUM_ITERATIONS, false);
+ 
+ 	/* Cooperative threads context switching */
+ 	thread_switch_yield(CONFIG_BENCHMARK_NUM_ITERATIONS, true);
++#endif
+ 
++#if !CONFIG_BENCHMARK_SKIP_INT_TO_THREAD
+ 	int_to_thread(CONFIG_BENCHMARK_NUM_ITERATIONS);
++#endif
+ 
+ 	/* Thread creation, starting, suspending, resuming and aborting. */
+ 
+diff --git a/tests/benchmarks/latency_measure/src/thread_switch_yield.c b/tests/benchmarks/latency_measure/src/thread_switch_yield.c
+index cca2bd909e97a32b6d53e4cc88a415834fd99bcd..aabf5ba45d9c481bfb329f30ba0e1c09fb68616a 100644
+--- a/tests/benchmarks/latency_measure/src/thread_switch_yield.c
++++ b/tests/benchmarks/latency_measure/src/thread_switch_yield.c
+@@ -20,8 +20,6 @@
+ #include <zephyr/kernel.h>
+ #include <zephyr/timing/timing.h>
+ #include <stdlib.h>
+-#include <zephyr/timestamp.h>
+-
+ #include "utils.h"
+ #include "timing_sc.h"
+ 
+diff --git a/tests/benchmarks/latency_measure/src/timing_sc.c b/tests/benchmarks/latency_measure/src/timing_sc.c
+index 60d6e9a720431876d39d0aa9a71c25c561c9e790..600a75bf8176dad55695db46f327c89875fe56d7 100644
+--- a/tests/benchmarks/latency_measure/src/timing_sc.c
++++ b/tests/benchmarks/latency_measure/src/timing_sc.c
+@@ -21,19 +21,11 @@ BENCH_BMEM uint64_t user_timestamp_overhead;
+ 
+ #define OVERHEAD_CALC_ITER 10
+ 
+-timing_t z_impl_timing_timestamp_get(void)
++timing_t timing_timestamp_get(void)
+ {
+ 	return timing_counter_get();
+ }
+ 
+-#ifdef CONFIG_USERSPACE
+-timing_t z_vrfy_timing_timestamp_get(void)
+-{
+-	return z_impl_timing_timestamp_get();
+-}
+-#include <zephyr/syscalls/timing_timestamp_get_mrsh.c>
+-#endif
+-
+ static void start_thread_entry(void *p1, void *p2, void *p3)
+ {
+ 	uint32_t  num_iterations = (uint32_t)(uintptr_t)p1;
+diff --git a/tests/benchmarks/latency_measure/src/timing_sc.h b/tests/benchmarks/latency_measure/src/timing_sc.h
+index 5d08fac5a14d776795a33f7d3a3a266f0a384baf..c07651bc9a4f6938789a405d6135a927c82055ae 100644
+--- a/tests/benchmarks/latency_measure/src/timing_sc.h
++++ b/tests/benchmarks/latency_measure/src/timing_sc.h
+@@ -11,11 +11,9 @@
+ #include <zephyr/timing/timing.h>
+ #include <stdint.h>
+ 
+-__syscall timing_t timing_timestamp_get(void);
++timing_t timing_timestamp_get(void);
+ 
+ void     timestamp_overhead_init(uint32_t num_iterations);
+ uint64_t timestamp_overhead_adjustment(uint32_t options1, uint32_t options2);
+ 
+-#include <zephyr/syscalls/timing_sc.h>
+-
+ #endif
+diff --git a/tests/benchmarks/latency_measure/src/utils.h b/tests/benchmarks/latency_measure/src/utils.h
+index b9cba6bee5d118955ad8f3eaded559c81e5e2fda..eb89f3e4016e742603028848927f787f8e3a2ac4 100644
+--- a/tests/benchmarks/latency_measure/src/utils.h
++++ b/tests/benchmarks/latency_measure/src/utils.h
+@@ -14,7 +14,6 @@
+ #include <zephyr/timing/timing.h>
+ #include <zephyr/sys/printk.h>
+ #include <stdio.h>
+-#include <zephyr/timestamp.h>
+ #include <zephyr/app_memory/app_memdomain.h>
+ 
+ #define START_STACK_SIZE (1024 + CONFIG_TEST_EXTRA_STACK_SIZE)

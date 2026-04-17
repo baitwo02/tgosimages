@@ -1,0 +1,9 @@
+diff --git a/source/hobot-drivers/configs/drobot_s100_defconfig b/source/hobot-drivers/configs/drobot_s100_defconfig
+index 12345678..abcdef12 100644
+--- a/source/hobot-drivers/configs/drobot_s100_defconfig
++++ b/source/hobot-drivers/configs/drobot_s100_defconfig
+@@ -1013 +1013,4 @@
+ # CONFIG_RUNTIME_TESTING_MENU is not set
++# Disable pointer authentication
++# CONFIG_ARM64_PTR_AUTH is not set
++# CONFIG_ARM64_PTR_AUTH_KERNEL is not set

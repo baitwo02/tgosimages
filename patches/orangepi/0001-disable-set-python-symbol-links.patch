@@ -1,0 +1,27 @@
+From 9959f57d8d4c71e28a4e4782b82516bcaa7de93e Mon Sep 17 00:00:00 2001
+From: ZCShou <72115@163.com>
+Date: Thu, 20 Nov 2025 13:39:24 +0800
+Subject: [PATHC] disable set python symbol links
+
+---
+ scripts/general.sh | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/general.sh b/scripts/general.sh
+index 35dc0ec..eb2fe90 100755
+--- a/scripts/general.sh
++++ b/scripts/general.sh
+@@ -1448,8 +1448,8 @@ prepare_host()
+ 	# Add support for Ubuntu 20.04, 21.04 and Mint 20.x
+ 	if [[ $HOSTRELEASE =~ ^(focal|hirsute|jammy|noble|noble|ulyana|ulyssa|bullseye|bookworm|uma)$ ]]; then
+ 		hostdeps+=" python2 python3"
+-		ln -fs /usr/bin/python2.7 /usr/bin/python2
+-		ln -fs /usr/bin/python2.7 /usr/bin/python
++		# ln -fs /usr/bin/python2.7 /usr/bin/python2
++		# ln -fs /usr/bin/python2.7 /usr/bin/python
+ 	else
+ 		hostdeps+=" python libpython-dev"
+ 	fi
+-- 
+2.51.2
+
