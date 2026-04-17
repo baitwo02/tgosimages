@@ -33,7 +33,7 @@ usage() {
     printf '  scripts/freertos.sh <command> [options]\n'
     printf '\n'
     printf 'Commands:\n'
-    printf '  qemu                               Build for QEMU (aarch64)\n'
+    printf '  qemu-aarch64                       Build for QEMU (aarch64)\n'
     printf '  phytiumpi                          Build for Phytium Pi\n'
     printf '  orangepi-5-plus                    Build for Orange Pi 5 Plus\n'
     printf '  all                                Build all supported platforms\n'
@@ -45,7 +45,7 @@ usage() {
     printf '  FREERTOS_CROSS_COMPILE             Cross compiler prefix (default: aarch64-linux-gnu-)\n'
     printf '\n'
     printf 'Examples:\n'
-    printf '  scripts/freertos.sh qemu           # Build for QEMU\n'
+    printf '  scripts/freertos.sh qemu-aarch64   # Build for QEMU\n'
     printf '  scripts/freertos.sh all            # Build all platforms\n'
     printf '  scripts/freertos.sh clean          # Clean all\n'
 }
@@ -356,7 +356,7 @@ fix_cmake_paths() {
     fi
 }
 
-# ── CMake build (shared by qemu and phytiumpi) ───────────────────────────────
+# ── CMake build (shared by qemu-aarch64 and phytiumpi) ───────────────────────
 
 build_cmake() {
     local rtos_name="$1"      # e.g. freertos_aarch64_qemu
@@ -399,7 +399,7 @@ build_cmake() {
 
 # ── QEMU ─────────────────────────────────────────────────────────────────────
 
-qemu() {
+qemu_aarch64() {
     if [[ "$#" -gt 0 && "$1" == "clean" ]]; then
         info "Cleaning QEMU FreeRTOS build artifacts"
         rm -rf "${FREERTOS_SRC_DIR}/build-freertos_aarch64_qemu"
@@ -564,8 +564,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             usage
             exit 0
             ;;
-        qemu)
-            qemu "$@"
+        qemu-aarch64)
+            qemu_aarch64 "$@"
             ;;
         phytiumpi)
             phytiumpi "$@"
@@ -574,18 +574,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             orangepi-5-plus "$@"
             ;;
         all)
-            qemu "$@"
+            qemu_aarch64 "$@"
             phytiumpi "$@"
             orangepi-5-plus "$@"
             ;;
         clean)
             rm -rf "${FREERTOS_SRC_DIR}"
-            qemu "clean"
+            qemu_aarch64 "clean"
             phytiumpi "clean"
             orangepi-5-plus "clean"
             ;;
         *)
-            die "Unknown command: $cmd (supported: qemu, phytiumpi, orangepi-5-plus, all, clean)"
+            die "Unknown command: $cmd (supported: qemu-aarch64, phytiumpi, orangepi-5-plus, all, clean)"
             ;;
     esac
 fi
