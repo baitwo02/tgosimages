@@ -38,6 +38,7 @@ alpine_usage() {
     printf '\n'
     printf '<command>:\n'
     printf '  aarch64                       Build minimal filesystem for aarch64\n'
+    printf '  loongarch64                   Build minimal filesystem for loongarch64\n'
     printf '  riscv64                       Build minimal filesystem for riscv64\n'
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
     printf '  help, -h, --help              Display this help information\n'
@@ -58,6 +59,7 @@ alpine_usage() {
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/rootfs/alpine.sh aarch64\n'
+    printf '  scripts/rootfs/alpine.sh loongarch64 --out_dir /tmp/rootfs-loongarch64.img\n'
     printf '  scripts/rootfs/alpine.sh riscv64 --out_dir /tmp/rootfs-riscv64.img\n'
     printf '  scripts/rootfs/alpine.sh x86_64 --img-size 2G\n'
     printf '  scripts/rootfs/alpine.sh aarch64 --guest /path/to/guest/files\n'
@@ -384,7 +386,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             alpine_usage
             exit 0
             ;;
-        aarch64|riscv64|x86_64)
+        aarch64|loongarch64|riscv64|x86_64)
             ALPINE_ARCH="$cmd"
             ;;
         *)

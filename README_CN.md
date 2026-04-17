@@ -106,6 +106,13 @@
 - `x86_64`
 - `loongarch64`
 
+`scripts/rootfs/alpine.sh` 当前支持：
+
+- `aarch64`
+- `loongarch64`
+- `riscv64`
+- `x86_64`
+
 说明：
 `loongarch64` 已经作为 Debian 脚本目标存在，但 Debian `trixie` 主仓库当前并不提供 `loong64` 包，因此该架构建议使用 `sid` / `unstable` 等更合适的 suite。
 
@@ -199,7 +206,7 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 - 下载 Alpine 官方 `minirootfs`
 - 使用 SHA256 校验下载文件
 - 生成 ext4 rootfs 镜像
-- 当前支持 `aarch64`、`riscv64`、`x86_64`
+- 当前支持 `aarch64`、`loongarch64`、`riscv64`、`x86_64`
 
 ### Debian
 

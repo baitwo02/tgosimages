@@ -106,6 +106,13 @@ For QEMU, the underlying script is `scripts/platform/qemu.sh`, which currently s
 - `x86_64`
 - `loongarch64`
 
+`scripts/rootfs/alpine.sh` currently supports:
+
+- `aarch64`
+- `loongarch64`
+- `riscv64`
+- `x86_64`
+
 Note:
 `loongarch64` is a valid Debian target in the script, but Debian `trixie` does not currently provide `loong64` packages in the main archive. Use an appropriate suite such as `sid` / `unstable` when building that variant.
 
@@ -199,7 +206,7 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 - Downloads official Alpine `minirootfs`
 - Verifies the downloaded archive with SHA256
 - Generates an ext4 rootfs image
-- Currently supports `aarch64`, `riscv64`, and `x86_64`
+- Currently supports `aarch64`, `loongarch64`, `riscv64`, and `x86_64`
 
 ### Debian
 
