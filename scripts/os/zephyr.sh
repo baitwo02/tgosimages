@@ -3,10 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source "${SCRIPT_DIR}/utils.sh"
+source "${SCRIPT_DIR}/../lib/utils.sh"
 
 ZEPHYR_REPO_URL="${ZEPHYR_REPO_URL:-https://github.com/zephyrproject-rtos/zephyr.git}"
 ZEPHYR_REF="${ZEPHYR_REF:-}"

@@ -3,10 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source $SCRIPT_DIR/utils.sh
+source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL="https://gitee.com/phytium_embedded/phytium-pi-os.git"
@@ -96,36 +96,36 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name phytiumpi $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name phytiumpi $@
 }
 
 rtthread() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" $@
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" $@
     else
         info "Cleaning RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" "-c"
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" "-c"
     fi
 }
 
 zephyr() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/zephyr.sh" phytiumpi --images-dir "${ZEPHYR_IMAGES_DIR}" "$@"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi --images-dir "${ZEPHYR_IMAGES_DIR}" "$@"
     else
         info "Cleaning Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/zephyr.sh" phytiumpi clean --images-dir "${ZEPHYR_IMAGES_DIR}"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi clean --images-dir "${ZEPHYR_IMAGES_DIR}"
     fi
 }
 
 freertos() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/freertos.sh" phytiumpi
+        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi
     else
         info "Cleaning FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/freertos.sh" phytiumpi clean
+        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi clean
     fi
 }
 

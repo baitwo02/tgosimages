@@ -2,10 +2,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source $SCRIPT_DIR/utils.sh
+source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Repository URLs
 
@@ -51,10 +51,11 @@ usage() {
 }
 
 build_rootfs() {
-    if [ ! -f "${SCRIPT_DIR}/mkfs.sh" ]; then
-        die "Root filesystem script does not exist: ${SCRIPT_DIR}/mkfs.sh"
+    local rootfs_script="${SCRIPT_DIR}/../rootfs/mkfs.sh"
+    if [ ! -f "${rootfs_script}" ]; then
+        die "Root filesystem script does not exist: ${rootfs_script}"
     fi
-    bash "${SCRIPT_DIR}/mkfs.sh" "${ARCH}" "--out_dir" "${FS_IMAGES_DIR}" --guest "./guest"
+    bash "${rootfs_script}" "${ARCH}" "--out_dir" "${FS_IMAGES_DIR}" --guest "./guest"
     success "Root filesystem creation completed"
 }
 
@@ -110,7 +111,7 @@ build_linux() {
             cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/qemu-${ARCH}"
             
             FS_IMAGES_DIR=${LINUX_IMAGES_DIR}
-            info "Creating root filesystem: ${SCRIPT_DIR}/mkfs.sh -> ${FS_IMAGES_DIR}"
+            info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/mkfs.sh -> ${FS_IMAGES_DIR}"
             build_rootfs
         fi
     else
@@ -153,18 +154,18 @@ arceos() {
     info "Building ArceOS using common arceos.sh script for platform: $platform -> $ARCEOS_IMAGES_DIR"
     
     # Call the arceos.sh script with proper parameters
-    bash "${SCRIPT_DIR}/arceos.sh" "$platform" --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name "qemu-${ARCH}" "$@"
+    bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name "qemu-${ARCH}" "$@"
     
     if [[ "$@" != *"clean"* ]]; then
         FS_IMAGES_DIR=${ARCEOS_IMAGES_DIR}
-        info "Creating root filesystem: ${SCRIPT_DIR}/mkfs.sh -> ${FS_IMAGES_DIR}"
+        info "Creating root filesystem: ${SCRIPT_DIR}/../rootfs/mkfs.sh -> ${FS_IMAGES_DIR}"
         build_rootfs
     fi
 }
 
 nimbos() {
     # Call the nimbos.sh script with proper parameters
-    bash "${SCRIPT_DIR}/nimbos.sh" "$ARCH" "--images-dir" "$IMAGES_BASE_DIR" "$@"
+    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" "--images-dir" "$IMAGES_BASE_DIR" "$@"
 }
 
 zephyr() {
@@ -172,7 +173,7 @@ zephyr() {
         die "Zephyr guest build is currently only supported for qemu aarch64"
     fi
 
-    bash "${SCRIPT_DIR}/zephyr.sh" qemu-aarch64 --images-dir "${IMAGES_BASE_DIR}/${ARCH}/zephyr" "$@"
+    bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64 --images-dir "${IMAGES_BASE_DIR}/${ARCH}/zephyr" "$@"
 }
 
 freertos() {
@@ -181,9 +182,9 @@ freertos() {
     fi
 
     if [[ "$@" != *"clean"* ]]; then
-        bash "${SCRIPT_DIR}/freertos.sh" qemu
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu
     else
-        bash "${SCRIPT_DIR}/freertos.sh" qemu clean
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu clean
     fi
 }
 

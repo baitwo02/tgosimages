@@ -3,7 +3,7 @@
 set -u
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 
 IMAGES_DIR="${ROOT_DIR}/IMAGES"
 RELEASE_DIR="${ROOT_DIR}/release"

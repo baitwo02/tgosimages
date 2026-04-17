@@ -8,7 +8,7 @@
 
 - `scripts/` 目录下的脚本自动化完成各开发板的 Linux 与 ArceOS 镜像编译、补丁应用与产物收集；
 - `build.sh` 提供单入口的批量构建和清理能力；
-- `scripts/release.sh` 支持将镜像一键打包并推送到 GitHub Release；
+- `scripts/tools/release.sh` 支持将镜像一键打包并推送到 GitHub Release；
 - `http_server.py` 可为本地镜像目录启动轻量的 HTTP 分发服务，方便团队内部共享与 CI 下载。 
 
 ## 开发板支持
@@ -98,7 +98,7 @@ scripts/mkfs.sh aarch64 --guest /path/to/guest/files
 
 ## 镜像
 
-所有构建产物会统一放到 `IMAGES/<platform>/<os>` 目录中，其中 `<os>` 取值为 `linux` 或 `arceos`。目录命名与脚本输出保持一致，便于 `scripts/release.sh`、`http_server.py` 以及外部自动化流程直接复用：
+所有构建产物会统一放到 `IMAGES/<platform>/<os>` 目录中，其中 `<os>` 取值为 `linux` 或 `arceos`。目录命名与脚本输出保持一致，便于 `scripts/tools/release.sh`、`http_server.py` 以及外部自动化流程直接复用：
 
 | 输出目录 | 内容说明 | 典型文件 / 命名规则 |
 | --- | --- | --- |
@@ -131,7 +131,7 @@ scripts/mkfs.sh aarch64 --guest /path/to/guest/files
 
 ### 打包与发布
 
-当镜像构建完毕后，可通过打包与发布脚本将产物整理为 tarball，并根据标签上传到远端仓库。`scripts/release.sh` 会读取 `IMAGES/` 下的目录生成归档文件，随后可与 GitHub Release 或内网 HTTP 服务配套使用。
+当镜像构建完毕后，可通过打包与发布脚本将产物整理为 tarball，并根据标签上传到远端仓库。`scripts/tools/release.sh` 会读取 `IMAGES/` 下的目录生成归档文件，随后可与 GitHub Release 或内网 HTTP 服务配套使用。
 
 #### 打包镜像
 
@@ -140,7 +140,7 @@ scripts/mkfs.sh aarch64 --guest /path/to/guest/files
 ```bash
 ./build.sh release pack
 # 或使用底层脚本：
-scripts/release.sh pack --in_dir IMAGES --out_dir release
+scripts/tools/release.sh pack --in_dir IMAGES --out_dir release
 ```
 
 #### Github Release
@@ -148,7 +148,7 @@ scripts/release.sh pack --in_dir IMAGES --out_dir release
 执行 GitHub 发布前需设置 `GITHUB_TOKEN` 并确认当前仓库具备 Release 写权限。脚本会根据指定 Tag 创建或更新 Release，并把 `release/` 中的压缩包依次上传：
 
 ```bash
-scripts/release.sh github \
+scripts/tools/release.sh github \
     --token <GITHUB_TOKEN> \
     --repo arceos-hypervisor/axvisor-guest \
     --tag v0.0.10 \

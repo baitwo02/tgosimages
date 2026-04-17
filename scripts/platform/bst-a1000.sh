@@ -3,10 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source $SCRIPT_DIR/utils.sh
+source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL="git@github.com:arceos-hypervisor/bst-a1000.git"
@@ -86,7 +86,7 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name bst-a1000 $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name bst-a1000 $@
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

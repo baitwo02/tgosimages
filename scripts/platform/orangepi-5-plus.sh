@@ -3,10 +3,10 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
-ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd -P)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source $SCRIPT_DIR/utils.sh
+source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL="https://github.com/orangepi-xunlong/orangepi-build.git"
@@ -16,7 +16,7 @@ LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/linux"
 ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/arceos"
 ZEPHYR_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/zephyr"
 FREERTOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/freertos"
-UBOOT_SCRIPT="${SCRIPT_DIR}/build-u-boot-orangepi5.sh.sh"
+UBOOT_SCRIPT="${SCRIPT_DIR}/../tools/build-u-boot-orangepi5.sh.sh"
 UBOOT_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/u-boot"
 
 # Output help information
@@ -128,26 +128,26 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name orangepi-5-plus $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name orangepi-5-plus $@
 }
 
 zephyr() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/zephyr.sh" orangepi-5-plus --images-dir "${ZEPHYR_IMAGES_DIR}" "$@"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" orangepi-5-plus --images-dir "${ZEPHYR_IMAGES_DIR}" "$@"
     else
         info "Cleaning Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/zephyr.sh" orangepi-5-plus clean --images-dir "${ZEPHYR_IMAGES_DIR}"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" orangepi-5-plus clean --images-dir "${ZEPHYR_IMAGES_DIR}"
     fi
 }
 
 freertos() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/freertos.sh" orangepi-5-plus
+        bash "${SCRIPT_DIR}/../os/freertos.sh" orangepi-5-plus
     else
         info "Cleaning FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/freertos.sh" orangepi-5-plus clean
+        bash "${SCRIPT_DIR}/../os/freertos.sh" orangepi-5-plus clean
     fi
 }
 

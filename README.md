@@ -8,7 +8,7 @@ This repository aggregates every Linux and ArceOS guest image supported by the A
 
 - The utilities under `scripts/` compile Linux and ArceOS images for each board, apply bundled patches, and gather the resulting binaries automatically.
 - `build.sh` exposes a single entry point for bulk builds and clean-ups across all supported targets.
-- `scripts/release.sh` packages finished images and pushes them to GitHub Release in one command.
+- `scripts/tools/release.sh` packages finished images and pushes them to GitHub Release in one command.
 - `http_server.py` starts a lightweight HTTP file server rooted at the local image directory, making it easy to share artifacts inside the team or serve them to CI jobs. 
 
 ## Supported Boards
@@ -98,7 +98,7 @@ scripts/mkfs.sh aarch64 --guest /path/to/guest/files
 
 ## Images
 
-All build artifacts are placed in the `IMAGES/<platform>/<os>` directory, where `<os>` is either `linux` or `arceos`. The directory names are consistent with the script output, making it easy to reuse them directly with `scripts/release.sh`, `http_server.py`, and external automation:
+All build artifacts are placed in the `IMAGES/<platform>/<os>` directory, where `<os>` is either `linux` or `arceos`. The directory names are consistent with the script output, making it easy to reuse them directly with `scripts/tools/release.sh`, `http_server.py`, and external automation:
 
 | Output Directory | Description | Typical Files / Naming |
 | --- | --- | --- |
@@ -131,7 +131,7 @@ All build artifacts are placed in the `IMAGES/<platform>/<os>` directory, where 
 
 ### Packaging and Release
 
-After the images are built, use the packaging and release scripts to organize the artifacts into tarballs and upload them to a remote repository. `scripts/release.sh` reads the directories under `IMAGES/`, generates archives, and can be used with GitHub Release or intranet HTTP services.
+After the images are built, use the packaging and release scripts to organize the artifacts into tarballs and upload them to a remote repository. `scripts/tools/release.sh` reads the directories under `IMAGES/`, generates archives, and can be used with GitHub Release or intranet HTTP services.
 
 #### Package Images
 
@@ -140,7 +140,7 @@ The packaging process traverses each platform directory under `IMAGES/`, generat
 ```bash
 ./build.sh release pack
 # Or use the lower-level script:
-scripts/release.sh pack --in_dir IMAGES --out_dir release
+scripts/tools/release.sh pack --in_dir IMAGES --out_dir release
 ```
 
 #### GitHub Release
@@ -148,7 +148,7 @@ scripts/release.sh pack --in_dir IMAGES --out_dir release
 Before publishing to GitHub, set `GITHUB_TOKEN` and confirm the repository has Release write permissions. The script creates or updates the specified tag and uploads the archives in `release/`:
 
 ```bash
-scripts/release.sh github \
+scripts/tools/release.sh github \
     --token <GITHUB_TOKEN> \
     --repo arceos-hypervisor/axvisor-guest \
     --tag v0.0.10 \
