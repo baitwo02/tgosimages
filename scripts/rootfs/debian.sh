@@ -160,10 +160,9 @@ debian_init_config() {
 
 debian_build_rootfs() {
     local volume_name="starry-debian-rootfs-${DEBIAN_ARCH}-$$"
-    local guest_mount=()
-
+    local guest_mount=""
     if [[ -n "${DEBIAN_GUEST_DIR}" ]]; then
-        guest_mount=(-v "${DEBIAN_GUEST_DIR}:/guest-src:ro")
+        guest_mount="-v ${DEBIAN_GUEST_DIR}:/guest-src:ro"
     fi
 
     info "Building Debian ${DEBIAN_SUITE} rootfs for ${DEBIAN_ARCH} (${DEBIAN_DPKG_ARCH})"
@@ -181,7 +180,7 @@ debian_build_rootfs() {
     docker run --rm \
         --platform "${DEBIAN_DOCKER_PLATFORM}" \
         -v "${volume_name}:/rootfs" \
-        "${guest_mount[@]}" \
+        ${guest_mount} \
         "${DEBIAN_DOCKER_IMAGE}" \
         bash -lc "
             set -euo pipefail
@@ -303,7 +302,7 @@ EOF_RESOLV
             cd /output
             rm -f '$(basename "${DEBIAN_ROOTFS_IMG}")'
             dd if=/dev/zero of='$(basename "${DEBIAN_ROOTFS_IMG}")' bs=1 count=0 seek='${DEBIAN_IMG_SIZE}' 2>/dev/null
-            mkfs.ext4 -F -L starry-rootfs '$(basename "${DEBIAN_ROOTFS_IMG}")'
+            mkfs.ext4 -O ^orphan_file,^metadata_csum_seed -F -L starry-rootfs '$(basename "${DEBIAN_ROOTFS_IMG}")'
             mkdir -p /mnt/rootfs
             mount -o loop '$(basename "${DEBIAN_ROOTFS_IMG}")' /mnt/rootfs
             cp -a /rootfs/. /mnt/rootfs/
