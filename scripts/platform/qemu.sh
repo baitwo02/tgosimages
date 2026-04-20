@@ -24,32 +24,32 @@ usage() {
     printf 'Build supported OS for QEMU\n'
     printf '\n'
     printf 'Usage:\n'
-    printf '  scripts/qemu.sh <command> <system> [options]\n'
+    printf '  scripts/qemu.sh <command> <os> [options]\n'
     printf '\n'
     printf 'Commands:\n'
-    printf '  aarch64                           Build all systems for AArch64 architecture\n'
-    printf '  x86_64                            Build all systems for x86_64 architecture\n'
-    printf '  riscv64                           Build all systems for RISC-V architecture\n'
-    printf '  all                               Build all supported architectures and systems\n'
+    printf '  aarch64                           Build all OS targets for AArch64 architecture\n'
+    printf '  x86_64                            Build all OS targets for x86_64 architecture\n'
+    printf '  riscv64                           Build all OS targets for RISC-V architecture\n'
+    printf '  all                               Build all supported architectures and OS targets\n'
     printf '  help, -h, --help                  Display this help information\n'
     printf '  clean                             Clean build output artifacts\n'
     printf '\n'
-    printf 'Systems:\n'
-    printf '  linux                             Build the Linux system\n'
-    printf '  arceos                            Build the ArceOS system\n'
-    printf '  nimbos                            Build the NimbOS system\n'
+    printf 'OS Targets:\n'
+    printf '  linux                             Build the Linux OS\n'
+    printf '  arceos                            Build the ArceOS OS\n'
+    printf '  nimbos                            Build the NimbOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
-    printf '  all                               Build all systems (default)\n'
+    printf '  all                               Build all OS targets (default)\n'
     printf '  clean                             Clean build output artifacts\n'
     printf '\n'
     printf 'Options:\n'
-    printf '  Optional, all options will be directly passed to the specific build system\n'
+    printf '  Optional, all options will be directly passed to the specific OS build script\n'
     printf '  --rootfs <list>                   Build rootfs after OS image generation\n'
     printf '\n'
     printf 'Rootfs Packaging:\n'
     printf '  * Rootfs is generated only when --rootfs is specified.\n'
-    printf '  * Build outputs from all selected systems are staged together into /guest/<system>/ inside one rootfs.\n'
+    printf '  * Build outputs from all selected OS targets are staged together into /guest/<os>/ inside one rootfs.\n'
     printf '  * Generated rootfs artifacts are stored directly under IMAGES/rootfs.\n'
     printf '\n'
     printf 'Examples:\n'
@@ -57,7 +57,7 @@ usage() {
     printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
     printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
     printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
-    printf '  scripts/qemu.sh riscv64 all       # Build all systems for RISC-V\n'
+    printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'
 }
 
 build_rootfs_one() {
@@ -95,14 +95,14 @@ ensure_rootfs_stage_dir() {
 }
 
 stage_rootfs_payload() {
-    local system_name="$1"
+    local os_name="$1"
     local source_dir="$2"
     local payload_dir
 
     [[ -d "${source_dir}" ]] || die "Payload source directory not found: ${source_dir}"
 
     ensure_rootfs_stage_dir
-    payload_dir="${ROOTFS_STAGE_DIR}/${system_name}"
+    payload_dir="${ROOTFS_STAGE_DIR}/${os_name}"
     rm -rf "${payload_dir}"
     mkdir -p "${payload_dir}"
 
@@ -112,16 +112,16 @@ stage_rootfs_payload() {
         cp -a "${source_dir}/." "${payload_dir}/"
     fi
 
-    printf 'system=%s\narch=%s\nsource=%s\n' "${system_name}" "${ARCH}" "${source_dir}" > "${payload_dir}/manifest.txt"
+    printf 'os=%s\narch=%s\nsource=%s\n' "${os_name}" "${ARCH}" "${source_dir}" > "${payload_dir}/manifest.txt"
 }
 
-package_system_into_rootfs() {
-    local system_name="$1"
+package_os_into_rootfs() {
+    local os_name="$1"
     local source_dir="$2"
 
     [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
 
-    stage_rootfs_payload "${system_name}" "${source_dir}"
+    stage_rootfs_payload "${os_name}" "${source_dir}"
 }
 
 finalize_rootfs() {
@@ -212,7 +212,7 @@ build_linux() {
             info "Copying image: ${KIMG_PATH} -> ${LINUX_IMAGES_DIR}/qemu-${ARCH}"
             cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/qemu-${ARCH}"
             
-            package_system_into_rootfs "linux" "${LINUX_IMAGES_DIR}"
+            package_os_into_rootfs "linux" "${LINUX_IMAGES_DIR}"
         fi
     else
         info "Building Linux: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} clean"
@@ -230,7 +230,7 @@ linux() {
     info "Applying patches..."
     apply_patches "$LINUX_PATCH_DIR" "$LINUX_SRC_DIR"
 
-    info "Starting to build ${ARCH} Linux system..."
+    info "Starting to build ${ARCH} Linux OS..."
     build_linux "$@"
 }
 
@@ -257,7 +257,7 @@ arceos() {
     bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name "qemu-${ARCH}" "$@"
     
     if [[ "$@" != *"clean"* ]]; then
-        package_system_into_rootfs "arceos" "${ARCEOS_IMAGES_DIR}"
+        package_os_into_rootfs "arceos" "${ARCEOS_IMAGES_DIR}"
     fi
 }
 
@@ -268,7 +268,7 @@ nimbos() {
     bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" "--images-dir" "$IMAGES_BASE_DIR" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
-        package_system_into_rootfs "nimbos" "${nimbos_images_dir}"
+        package_os_into_rootfs "nimbos" "${nimbos_images_dir}"
     fi
 }
 
@@ -282,7 +282,7 @@ zephyr() {
     bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64 --images-dir "${zephyr_images_dir}" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
-        package_system_into_rootfs "zephyr" "${zephyr_images_dir}"
+        package_os_into_rootfs "zephyr" "${zephyr_images_dir}"
     fi
 }
 
@@ -300,7 +300,7 @@ freertos() {
             rm -rf "${freertos_images_dir}"
             mv "${ROOT_DIR}/IMAGES/qemu/freertos" "${freertos_images_dir}"
         fi
-        package_system_into_rootfs "freertos" "${freertos_images_dir}"
+        package_os_into_rootfs "freertos" "${freertos_images_dir}"
     else
         bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean
         rm -rf "${freertos_images_dir}" || true
@@ -349,11 +349,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
         aarch64|riscv64|x86_64)
             ARCH="$cmd"
-            SYSTEM="${1:-all}"
+            [[ $# -gt 0 ]] || die "Missing os for architecture: ${ARCH} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
+            [[ "${1:-}" != --* ]] || die "Missing os for architecture: ${ARCH} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
+            OS="$1"
             shift 1 || true
             parse_common_args "$@"
             trap '[[ -n "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"' EXIT
-            case "${SYSTEM}" in
+            case "${OS}" in
                 linux)
                     linux "${BUILD_ARGS[@]}"
                     ;;
@@ -389,18 +391,25 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     clean_rootfs_outputs
                     ;;
                 *)
-                    die "Unknown system: ${SYSTEM} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
+                    die "Unknown os: ${OS} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
                     ;;
             esac
-            if [[ "${SYSTEM}" != "clean" ]]; then
+            if [[ "${OS}" != "clean" ]]; then
                 finalize_rootfs
             fi
             trap - EXIT
             [[ -n "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"
             ;;
         all)
+            if [[ $# -eq 0 || "${1:-}" == --* ]]; then
+                OS="all"
+            else
+                OS="$1"
+                shift 1 || true
+            fi
+
             for arch in aarch64 riscv64 x86_64; do
-                "$0" "$arch" "$@" || { echo "[ERROR] $arch build failed" >&2; exit 1; }
+                "$0" "$arch" "${OS}" "$@" || { echo "[ERROR] $arch build failed" >&2; exit 1; }
             done
             ;;
         clean)
