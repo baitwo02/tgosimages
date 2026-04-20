@@ -39,7 +39,13 @@ usage() {
     printf '  scripts/roc-rk3568-pc.sh linux    # Build only Linux\n'
 }
 
-build_linux() {
+linux() {
+    if [[ "$@" != *"clean"* ]]; then
+        info "Building to build the Linux system..."
+    else
+        info "Cleaning the Linux build artifacts..."
+    fi
+
     # Since Rockchip's Linux SDK is managed by a large repository using repo, and manufacturers usually do not provide online repositories (typically only compressed packages), we log in to a prepared SDK server via SSH for building.
     REMOTE_HOST="10.3.10.194"
     REMOTE_DIR="/share/guest-images/firefly_rk3568_sdk"
@@ -102,19 +108,9 @@ build_linux() {
             fi
         fi
 
-            info "Removing ${LINUX_IMAGES_DIR}/*"
-            rm -f ${LINUX_IMAGES_DIR}/* || true
-        fi
-}
-
-linux() {
-    if [[ "$@" != *"clean"* ]]; then
-        info "Building to build the Linux system..."
-    else
-        info "Cleaning the Linux build artifacts..."
+        info "Removing ${LINUX_IMAGES_DIR}/*"
+        rm -f ${LINUX_IMAGES_DIR}/* || true
     fi
-
-    build_linux "$@"
 }
 
 arceos() {

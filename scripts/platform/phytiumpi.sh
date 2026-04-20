@@ -43,7 +43,20 @@ usage() {
     printf '  scripts/phytiumpi.sh linux        # Build only Linux\n'
 }
 
-build_linux() {
+linux() {
+    if [[ "$@" != *"clean"* ]]; then
+        info "Cloning Linux source repository $LINUX_REPO_URL -> $LINUX_SRC_DIR"
+        clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
+        
+        if [[ -d "$LINUX_PATCH_DIR" ]]; then
+            info "Applying patches..."
+            apply_patches "$LINUX_PATCH_DIR" "$LINUX_SRC_DIR"
+        fi
+        info "Building to build the Linux system..."
+    else
+        info "Cleaning the Linux build artifacts..."
+    fi
+
     if [[ -d "$LINUX_SRC_DIR" ]]; then
         pushd "$LINUX_SRC_DIR" >/dev/null
         if [[ "$@" != *"clean"* ]]; then
@@ -71,23 +84,6 @@ build_linux() {
         fi
         popd >/dev/null
     fi
-}
-
-linux() {
-    if [[ "$@" != *"clean"* ]]; then
-        info "Cloning Linux source repository $LINUX_REPO_URL -> $LINUX_SRC_DIR"
-        clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
-        
-        if [[ -d "$LINUX_PATCH_DIR" ]]; then
-            info "Applying patches..."
-            apply_patches "$LINUX_PATCH_DIR" "$LINUX_SRC_DIR"
-        fi
-        info "Building to build the Linux system..."
-    else
-        info "Cleaning the Linux build artifacts..."
-    fi
-
-    build_linux "$@"
 }
 
 arceos() {

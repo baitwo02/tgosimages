@@ -161,7 +161,14 @@ clean_rootfs_outputs() {
     done
 }
 
-build_linux() {
+linux() {
+    info "Cloning ${ARCH} Linux source repository $LINUX_REPO_URL"
+    clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
+
+    info "Applying patches..."
+    apply_patches "$LINUX_PATCH_DIR" "$LINUX_SRC_DIR"
+
+    info "Starting to build ${ARCH} Linux OS..."
     local commands=("$@")
     case "${ARCH}" in
         aarch64)
@@ -221,17 +228,6 @@ build_linux() {
         info "Removing ${LINUX_IMAGES_DIR}/*"
         rm -rf ${LINUX_IMAGES_DIR}/* || true
     fi
-}
-
-linux() {
-    info "Cloning ${ARCH} Linux source repository $LINUX_REPO_URL"
-    clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
-
-    info "Applying patches..."
-    apply_patches "$LINUX_PATCH_DIR" "$LINUX_SRC_DIR"
-
-    info "Starting to build ${ARCH} Linux OS..."
-    build_linux "$@"
 }
 
 arceos() {

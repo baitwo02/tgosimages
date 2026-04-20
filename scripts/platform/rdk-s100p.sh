@@ -91,7 +91,13 @@ usage() {
     printf '  scripts/rdk-s100p.sh linux        # Build only Linux\n'
 }
 
-build_linux() {
+linux() {
+    if [[ "$@" != *"clean"* ]]; then
+        info "Building to build the Linux system..."
+    else
+        info "Cleaning the Linux build artifacts..."
+    fi
+
     # RDK S100P SDK is located at /share/guest-images/rdk_s100p
     REMOTE_HOST="10.3.10.194"
     REMOTE_DIR="/share/guest-images/rdk_s100p"
@@ -183,16 +189,6 @@ build_linux() {
         info "Removing ${LINUX_IMAGES_DIR}/*"
         rm -f ${LINUX_IMAGES_DIR}/* || true
     fi
-}
-
-linux() {
-    if [[ "$@" != *"clean"* ]]; then
-        info "Building to build the Linux system..."
-    else
-        info "Cleaning the Linux build artifacts..."
-    fi
-
-    build_linux "$@"
 }
 
 arceos() {
