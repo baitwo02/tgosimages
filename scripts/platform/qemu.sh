@@ -40,7 +40,7 @@ usage() {
     printf '  nimbos                            Build the NimbOS system\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
-    printf '  all|""                            Build all systems (default)\n'
+    printf '  all                               Build all systems (default)\n'
     printf '  clean                             Clean build output artifacts\n'
     printf '\n'
     printf 'Options:\n'
@@ -72,11 +72,8 @@ build_rootfs_one() {
     info "Creating root filesystem: ${rootfs_script} -> ${ROOTFS_IMAGES_DIR}"
 
     case "${rootfs_builder}" in
-        busybox|debian)
+        busybox|alpine|debian)
             bash "${rootfs_script}" "${ARCH}" "--out_dir" "${ROOTFS_IMAGES_DIR}" --guest "${ROOTFS_STAGE_DIR}"
-            ;;
-        alpine)
-            bash "${rootfs_script}" "${ARCH}" "--out_dir" "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-alpine.img" --guest "${ROOTFS_STAGE_DIR}"
             ;;
         "")
             return 0

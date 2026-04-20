@@ -46,7 +46,7 @@ alpine_usage() {
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
-    printf '  --out_dir <path>              Output image path (default: IMAGES/rootfs/rootfs-<arch>-alpine.img)\n'
+    printf '  --out_dir <dir>               Output directory (default image: IMAGES/rootfs/rootfs-<arch>-alpine.img)\n'
     printf '  --guest <dir>                 Guest directory to copy into rootfs /guest\n'
     printf '  --img-size <size>             Output image size (default: 1G)\n'
     printf '\n'
@@ -63,8 +63,8 @@ alpine_usage() {
     printf 'Examples:\n'
     printf '  scripts/rootfs/alpine.sh aarch64\n'
     printf '  scripts/rootfs/alpine.sh all\n'
-    printf '  scripts/rootfs/alpine.sh loongarch64 --out_dir /tmp/rootfs-loongarch64-alpine.img\n'
-    printf '  scripts/rootfs/alpine.sh riscv64 --out_dir /tmp/rootfs-riscv64-alpine.img\n'
+    printf '  scripts/rootfs/alpine.sh loongarch64 --out_dir /tmp/rootfs\n'
+    printf '  scripts/rootfs/alpine.sh riscv64 --out_dir /tmp/rootfs\n'
     printf '  scripts/rootfs/alpine.sh x86_64 --img-size 2G\n'
     printf '  scripts/rootfs/alpine.sh aarch64 --guest /path/to/guest/files\n'
 }
@@ -104,7 +104,8 @@ alpine_init_config() {
 
     ALPINE_URL="${ALPINE_BASE}/${ALPINE_REL}/releases/${ALPINE_ARCH}"
     ALPINE_WORK_DIR="${BUILD_DIR}/alpine/${ALPINE_ARCH}"
-    ALPINE_ROOTFS_IMG="${ALPINE_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs/rootfs-${ALPINE_ARCH}-alpine.img}"
+    local output_dir="${ALPINE_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
+    ALPINE_ROOTFS_IMG="${output_dir}/rootfs-${ALPINE_ARCH}-alpine.img"
 
     if [[ -n "${ALPINE_GUEST_DIR}" ]]; then
         ALPINE_GUEST_DIR="$(cd "${ALPINE_GUEST_DIR}" 2>/dev/null && pwd -P)" || {

@@ -54,7 +54,7 @@ usage() {
     printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
-    printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs/rootfs-aarch64-alpine.img"
+    printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs debian riscv64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 release pack"
     printf '%s\n' "  $0 release github --token <TOKEN> --repo <owner/repo> --tag <tag>"
