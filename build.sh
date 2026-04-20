@@ -46,7 +46,6 @@ usage() {
     printf '%s\n' "    debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
-    printf '%s\n' "  $0 os phytiumpi"
     printf '%s\n' "  $0 os phytiumpi                  # build the default OS set defined by scripts/platform/phytiumpi.sh"
     printf '%s\n' "  $0 os qemu-aarch64                # build QEMU aarch64 + busybox/alpine/debian rootfs"
     printf '%s\n' "  $0 os qemu-aarch64 linux          # build only QEMU aarch64 Linux guest"
