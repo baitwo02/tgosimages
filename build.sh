@@ -112,8 +112,18 @@ run_platform_target() {
         all)
             local extra_args=("$@")
             for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
-                echo "Building: $p ${extra_args[*]}"
-                "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                if [[ ${#extra_args[@]} -eq 0 ]]; then
+                    if [[ "$p" == qemu-* ]]; then
+                        echo "Building: $p all --rootfs busybox,alpine,debian"
+                        "$0" platform "$p" all --rootfs busybox,alpine,debian || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                    else
+                        echo "Building: $p all"
+                        "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                    fi
+                else
+                    echo "Building: $p ${extra_args[*]}"
+                    "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                fi
             done
             ;;
         clean)
@@ -188,9 +198,15 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             [[ -n "$target" ]] || { echo "[ERROR] Missing OS target" >&2; usage; exit 2; }
             case "$target" in
                 all)
+                    os_args=("$@")
                     for os_target in arceos zephyr freertos rtthread nimbos; do
-                        echo "Building OS target: $os_target $*"
-                        "$0" os "$os_target" "$@" || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
+                        if [[ ${#os_args[@]} -eq 0 ]]; then
+                            echo "Building OS target: $os_target all"
+                            "$0" os "$os_target" all || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
+                        else
+                            echo "Building OS target: $os_target ${os_args[*]}"
+                            "$0" os "$os_target" "${os_args[@]}" || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
+                        fi
                     done
                     ;;
                 arceos|zephyr|freertos|rtthread|nimbos)
@@ -209,10 +225,14 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             [[ -n "$target" ]] || { echo "[ERROR] Missing rootfs target" >&2; usage; exit 2; }
             case "$target" in
                 all)
-                    [[ $# -gt 0 ]] || { echo "[ERROR] rootfs all requires an architecture argument" >&2; exit 2; }
+                    rootfs_args=("$@")
+                    if [[ ${#rootfs_args[@]} -eq 0 ]]; then
+                        echo "[ERROR] rootfs all requires an architecture argument or clean" >&2
+                        exit 2
+                    fi
                     for rootfs_target in busybox alpine debian; do
-                        echo "Building rootfs target: $rootfs_target $*"
-                        "$0" rootfs "$rootfs_target" "$@" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
+                        echo "Running rootfs target: $rootfs_target ${rootfs_args[*]}"
+                        "$0" rootfs "$rootfs_target" "${rootfs_args[@]}" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
                     done
                     ;;
                 busybox|alpine|debian)
