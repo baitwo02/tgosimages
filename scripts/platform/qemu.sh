@@ -15,7 +15,7 @@ LINUX_SRC_DIR="${BUILD_DIR}/qemu_linux"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/qemu"
 IMAGES_BASE_DIR="${ROOT_DIR}/IMAGES/qemu"
 ROOTFS_IMAGES_DIR="${ROOT_DIR}/IMAGES/rootfs"
-ROOTFS_BUILDER=""
+ROOTFS_BUILDERS=()
 BUILD_ARGS=()
 ROOTFS_STAGE_DIR=""
 
@@ -45,7 +45,7 @@ usage() {
     printf '\n'
     printf 'Options:\n'
     printf '  Optional, all options will be directly passed to the specific build system\n'
-    printf '  --rootfs <busybox|alpine|debian>  Build a rootfs after OS image generation\n'
+    printf '  --rootfs <list>                   Build rootfs after OS image generation\n'
     printf '\n'
     printf 'Rootfs Packaging:\n'
     printf '  * Rootfs is generated only when --rootfs is specified.\n'
@@ -56,11 +56,13 @@ usage() {
     printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
     printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
     printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
+    printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
     printf '  scripts/qemu.sh riscv64 all       # Build all systems for RISC-V\n'
 }
 
-build_rootfs() {
-    local rootfs_script="${SCRIPT_DIR}/../rootfs/${ROOTFS_BUILDER}.sh"
+build_rootfs_one() {
+    local rootfs_builder="$1"
+    local rootfs_script="${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh"
 
     if [ ! -f "${rootfs_script}" ]; then
         die "Root filesystem script does not exist: ${rootfs_script}"
@@ -69,7 +71,7 @@ build_rootfs() {
     mkdir -p "${ROOTFS_IMAGES_DIR}"
     info "Creating root filesystem: ${rootfs_script} -> ${ROOTFS_IMAGES_DIR}"
 
-    case "${ROOTFS_BUILDER}" in
+    case "${rootfs_builder}" in
         busybox|debian)
             bash "${rootfs_script}" "${ARCH}" "--out_dir" "${ROOTFS_IMAGES_DIR}" --guest "${ROOTFS_STAGE_DIR}"
             ;;
@@ -80,7 +82,7 @@ build_rootfs() {
             return 0
             ;;
         *)
-            die "Unsupported rootfs builder: ${ROOTFS_BUILDER} (supported: busybox, alpine, debian)"
+            die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
             ;;
     esac
 
@@ -120,39 +122,46 @@ package_system_into_rootfs() {
     local system_name="$1"
     local source_dir="$2"
 
-    [[ -n "${ROOTFS_BUILDER}" ]] || return 0
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
 
     stage_rootfs_payload "${system_name}" "${source_dir}"
 }
 
 finalize_rootfs() {
-    [[ -n "${ROOTFS_BUILDER}" ]] || return 0
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
     [[ -n "${ROOTFS_STAGE_DIR}" && -d "${ROOTFS_STAGE_DIR}" ]] || {
         warn "No guest payload was staged for rootfs generation"
         return 0
     }
 
-    build_rootfs
+    local rootfs_builder
+    for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
+        build_rootfs_one "${rootfs_builder}"
+    done
 }
 
 clean_rootfs_outputs() {
-    [[ -n "${ROOTFS_BUILDER}" ]] || return 0
+    local rootfs_builder
 
-    case "${ROOTFS_BUILDER}" in
-        busybox)
-            rm -f "${ROOTFS_IMAGES_DIR}/initramfs-${ARCH}-busybox.cpio.gz"
-            rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-busybox.img"
-            ;;
-        alpine)
-            rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-alpine.img"
-            ;;
-        debian)
-            rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-debian.img"
-            ;;
-        *)
-            die "Unsupported rootfs builder: ${ROOTFS_BUILDER} (supported: busybox, alpine, debian)"
-            ;;
-    esac
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
+
+    for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
+        case "${rootfs_builder}" in
+            busybox)
+                rm -f "${ROOTFS_IMAGES_DIR}/initramfs-${ARCH}-busybox.cpio.gz"
+                rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-busybox.img"
+                ;;
+            alpine)
+                rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-alpine.img"
+                ;;
+            debian)
+                rm -f "${ROOTFS_IMAGES_DIR}/rootfs-${ARCH}-debian.img"
+                ;;
+            *)
+                die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
+                ;;
+        esac
+    done
 }
 
 build_linux() {
@@ -303,12 +312,26 @@ freertos() {
 
 parse_common_args() {
     BUILD_ARGS=()
+    ROOTFS_BUILDERS=()
+    local builder
+    local seen
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --rootfs)
                 [[ $# -ge 2 ]] || die "--rootfs requires a value"
-                ROOTFS_BUILDER="$2"
+                IFS=',' read -r -a seen <<< "$2"
+                for builder in "${seen[@]}"; do
+                    [[ -n "${builder}" ]] || continue
+                    case "${builder}" in
+                        busybox|alpine|debian)
+                            ROOTFS_BUILDERS+=("${builder}")
+                            ;;
+                        *)
+                            die "Unsupported rootfs builder: ${builder} (supported: busybox, alpine, debian)"
+                            ;;
+                    esac
+                done
                 shift 2
                 ;;
             *)
@@ -369,7 +392,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     clean_rootfs_outputs
                     ;;
                 *)
-                    die "Unknown system: ${SYSTEM} (supported: linux, arceos, nimbos, zephyr, all)"
+                    die "Unknown system: ${SYSTEM} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
                     ;;
             esac
             if [[ "${SYSTEM}" != "clean" ]]; then

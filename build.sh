@@ -12,14 +12,12 @@ PLATFORMS=(phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100
 QEMU_TARGETS=(qemu-aarch64 qemu-x86_64 qemu-riscv64)
 ALL_PLATFORM_TARGETS=("${PLATFORMS[@]}" "${QEMU_TARGETS[@]}")
 COMMON_OS_TARGETS=(arceos zephyr freertos rtthread nimbos)
-ROOTFS_TARGETS=(busybox alpine)
 
 usage() {
     printf '%s\n' "Usage:"
     printf '%s\n' "  $0 os <target> [options]"
     printf '%s\n' "  $0 rootfs <target> [options]"
     printf '%s\n' "  $0 release [options]"
-    printf '%s\n' "  $0 <legacy-target> [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
     printf '%s\n' "OS targets:"
@@ -36,31 +34,28 @@ usage() {
     printf '%s\n' "    qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
     printf '%s\n' "    all                  -> build all platform OS targets sequentially"
     printf '%s\n' "    clean                -> clean all platform OS targets"
-    printf '%s\n' "  common OS builders:"
+    printf '%s\n' "  independent OS builders:"
     printf '%s\n' "    arceos               -> scripts/os/arceos.sh"
     printf '%s\n' "    zephyr               -> scripts/os/zephyr.sh"
     printf '%s\n' "    freertos             -> scripts/os/freertos.sh"
-    printf '%s\n' "    rtthread             -> scripts/os/rtthread.sh"
     printf '%s\n' "    nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' ""
     printf '%s\n' "Rootfs targets:"
     printf '%s\n' "    busybox              -> scripts/rootfs/busybox.sh"
     printf '%s\n' "    alpine               -> scripts/rootfs/alpine.sh"
+    printf '%s\n' "    debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
     printf '%s\n' "  $0 os phytiumpi"
-    printf '%s\n' "  $0 os qemu-aarch64 linux"
-    printf '%s\n' "  $0 os qemu riscv64 all"
+    printf '%s\n' "  $0 os phytiumpi                  # build the default OS set defined by scripts/platform/phytiumpi.sh"
+    printf '%s\n' "  $0 os qemu-aarch64                # build QEMU aarch64 + busybox/alpine/debian rootfs"
+    printf '%s\n' "  $0 os qemu-aarch64 linux          # build only QEMU aarch64 Linux guest"
+    printf '%s\n' "  $0 os qemu riscv64 all --rootfs alpine,debian"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
-    printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/qemu/linux/aarch64"
-    printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/qemu/linux/aarch64"
+    printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
+    printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs/rootfs-aarch64-alpine.img"
+    printf '%s\n' "  $0 rootfs debian riscv64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 release pack"
-    printf '%s\n' ""
-    printf '%s\n' "Legacy compatibility:"
-    printf '%s\n' "  $0 phytiumpi"
-    printf '%s\n' "  $0 qemu-aarch64"
-    printf '%s\n' "  $0 all"
-    printf '%s\n' "  $0 clean"
 }
 
 ensure_script() {
@@ -97,8 +92,8 @@ run_platform_target() {
             local script_path="${PLATFORM_DIR}/qemu.sh"
             ensure_script "$script_path"
             if [[ $# -eq 0 ]]; then
-                echo "Running: $script_path $arch all"
-                exec "$script_path" "$arch" all
+                echo "Running: $script_path $arch all --rootfs busybox,alpine,debian"
+                exec "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
             fi
             echo "Running: $script_path $arch $*"
             exec "$script_path" "$arch" "$@"
@@ -107,7 +102,13 @@ run_platform_target() {
             local arch="${1:-}"
             shift || true
             [[ -n "$arch" ]] || { echo "[ERROR] qemu requires an architecture: aarch64, x86_64, or riscv64" >&2; exit 2; }
-            run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "${@:-all}"
+            if [[ $# -eq 0 ]]; then
+                local script_path="${PLATFORM_DIR}/qemu.sh"
+                ensure_script "$script_path"
+                echo "Running: $script_path $arch all --rootfs busybox,alpine,debian"
+                exec "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
+            fi
+            run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "$@"
             ;;
         all)
             local extra_args=("$@")
@@ -215,15 +216,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             echo "[CLEANALL] Removing build, IMAGES and release directories"
             rm -rf build IMAGES release
             echo "[CLEANALL] Removed all directories"
-            ;;
-        phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000|qemu-aarch64|qemu-x86_64|qemu-riscv64|qemu|all|clean)
-            run_platform_target "$cmd" "$@"
-            ;;
-        arceos|zephyr|freertos|rtthread|nimbos)
-            run_common_os_target "$cmd" "$@"
-            ;;
-        busybox|alpine)
-            run_rootfs_target "$cmd" "$@"
             ;;
         *)
             echo "[ERROR] Unknown command or target: $cmd" >&2
