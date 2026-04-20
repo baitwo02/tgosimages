@@ -5,6 +5,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
+START_DIR="$(pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
 
@@ -53,6 +54,25 @@ pack_parse_args() {
     done
 }
 
+normalize_dir_path() {
+    local dir_path="$1"
+
+    if [[ "${dir_path}" = /* ]]; then
+        printf '%s\n' "${dir_path}"
+    else
+        printf '%s\n' "${START_DIR}/${dir_path}"
+    fi
+}
+
+pack_directory() {
+    local source_dir="$1"
+    local package_stem="$2"
+    local out_path="${RELEASE_DIR}/${package_stem}.tar.gz"
+
+    info "Packing ${source_dir} -> ${out_path}"
+    tar -czf "${out_path}" -C "${source_dir}" .
+}
+
 pack_images() {
     local count_packed=0
     local count_skipped=0
@@ -62,6 +82,7 @@ pack_images() {
     local rel_path
     local pkg_name
     local out_path
+    local packaged_any=0
 
     mkdir -p "${RELEASE_DIR}"
     cd "${IMAGES_DIR}"
@@ -77,9 +98,9 @@ pack_images() {
                     pkg_name="${rel_path//\//_}.tar.gz"
                     out_path="${RELEASE_DIR}/${pkg_name}"
                     if find "${leaf}" -mindepth 1 | read; then
-                        info "Packing ${rel_path} -> ${out_path}"
-                        tar -czf "${out_path}" -C "${leaf}" .
+                        pack_directory "${leaf}" "${rel_path//\//_}"
                         count_packed=$((count_packed + 1))
+                        packaged_any=1
                     else
                         warn "Skipping empty directory ${rel_path}"
                         count_skipped=$((count_skipped + 1))
@@ -93,9 +114,9 @@ pack_images() {
                 pkg_name="${rel_path//\//_}.tar.gz"
                 out_path="${RELEASE_DIR}/${pkg_name}"
                 if find "${leaf}" -mindepth 1 | read; then
-                    info "Packing ${rel_path} -> ${out_path}"
-                    tar -czf "${out_path}" -C "${leaf}" .
+                    pack_directory "${leaf}" "${rel_path//\//_}"
                     count_packed=$((count_packed + 1))
+                    packaged_any=1
                 else
                     warn "Skipping empty directory ${rel_path}"
                     count_skipped=$((count_skipped + 1))
@@ -103,6 +124,16 @@ pack_images() {
             done
         fi
     done
+
+    if [[ ${packaged_any} -eq 0 ]]; then
+        if find . -mindepth 1 -maxdepth 1 | read; then
+            pack_directory "${IMAGES_DIR}" "$(basename "${IMAGES_DIR}")"
+            count_packed=$((count_packed + 1))
+        else
+            warn "Skipping empty directory $(basename "${IMAGES_DIR}")"
+            count_skipped=$((count_skipped + 1))
+        fi
+    fi
 
     success "Packaging completed: ${count_packed} directories, skipped ${count_skipped} empty directories"
     cd - >/dev/null
@@ -115,6 +146,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     fi
 
     pack_parse_args "$@"
+
+    IMAGES_DIR="$(normalize_dir_path "${IMAGES_DIR}")"
+    RELEASE_DIR="$(normalize_dir_path "${RELEASE_DIR}")"
 
     if [[ ! -d "${IMAGES_DIR}" ]]; then
         die "Input directory does not exist: ${IMAGES_DIR}"
