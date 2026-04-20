@@ -31,6 +31,7 @@ mkfs_usage() {
     printf '  riscv64                       Build minimal filesystem for riscv64\n'
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
     printf '  all                           Build minimal filesystem for all supported architectures\n'
+    printf '  clean                         Clean generated images for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
@@ -52,6 +53,18 @@ mkfs_usage() {
     printf '  scripts/rootfs/busybox.sh all\n'
     printf '  scripts/rootfs/busybox.sh riscv64 --out_dir /tmp/output\n'
     printf '  scripts/rootfs/busybox.sh aarch64 --guest /path/to/guest/files\n'
+}
+
+mkfs_clean_outputs() {
+    local output_dir="${MKFS_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
+    rm -f \
+        "${output_dir}/initramfs-aarch64-busybox.cpio.gz" \
+        "${output_dir}/initramfs-riscv64-busybox.cpio.gz" \
+        "${output_dir}/initramfs-x86_64-busybox.cpio.gz" \
+        "${output_dir}/rootfs-aarch64-busybox.img" \
+        "${output_dir}/rootfs-riscv64-busybox.img" \
+        "${output_dir}/rootfs-x86_64-busybox.img"
+    success "BusyBox rootfs outputs cleaned in ${output_dir}"
 }
 
 mkfs_parse_args() {
@@ -277,6 +290,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 MKFS_ARCH="${arch}"
                 mkfs
             done
+            ;;
+        clean)
+            mkfs_parse_args "$@"
+            mkfs_clean_outputs
             ;;
         *)
             die "Unknown command: $cmd"

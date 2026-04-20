@@ -43,6 +43,7 @@ alpine_usage() {
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
     printf '  loongarch64                   Build minimal filesystem for loongarch64\n'
     printf '  all                           Build minimal filesystem for all supported architectures\n'
+    printf '  clean                         Clean generated images for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
@@ -393,6 +394,16 @@ alpine() {
     alpine_create_rootfs
 }
 
+alpine_clean_outputs() {
+    local output_dir="${ALPINE_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
+    rm -f \
+        "${output_dir}/rootfs-aarch64-alpine.img" \
+        "${output_dir}/rootfs-loongarch64-alpine.img" \
+        "${output_dir}/rootfs-riscv64-alpine.img" \
+        "${output_dir}/rootfs-x86_64-alpine.img"
+    success "Alpine rootfs outputs cleaned in ${output_dir}"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift || true
@@ -416,6 +427,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 ALPINE_ARCH="${arch}"
                 alpine
             done
+            ;;
+        clean)
+            alpine_parse_args "$@"
+            alpine_clean_outputs
             ;;
         *)
             die "Unknown command: $cmd"

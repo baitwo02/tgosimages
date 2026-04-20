@@ -36,6 +36,7 @@ debian_usage() {
     printf '  x86_64                        Build Debian rootfs for x86_64\n'
     printf '  loongarch64                   Build Debian rootfs for loongarch64\n'
     printf '  all                           Build Debian rootfs for all supported architectures\n'
+    printf '  clean                         Clean generated images for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
@@ -317,6 +318,23 @@ EOF_RESOLV
     success "Debian rootfs created: ${DEBIAN_ROOTFS_IMG}"
 }
 
+debian_clean_outputs() {
+    local output_dir="${DEBIAN_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
+
+    if [[ -n "${DEBIAN_OUTPUT}" ]]; then
+        rm -f "${DEBIAN_OUTPUT}"
+        success "Debian rootfs output cleaned: ${DEBIAN_OUTPUT}"
+        return 0
+    fi
+
+    rm -f \
+        "${output_dir}/rootfs-aarch64-debian.img" \
+        "${output_dir}/rootfs-riscv64-debian.img" \
+        "${output_dir}/rootfs-x86_64-debian.img" \
+        "${output_dir}/rootfs-loongarch64-debian.img"
+    success "Debian rootfs outputs cleaned in ${output_dir}"
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift || true
@@ -348,6 +366,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 debian_validate_suite_support
                 debian_build_rootfs
             done
+            ;;
+        clean)
+            debian_parse_args "$@"
+            debian_clean_outputs
             ;;
         *)
             die "Unknown command: ${cmd}"

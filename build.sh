@@ -12,7 +12,7 @@ usage() {
     printf '%s\n' "Usage:"
     printf '%s\n' "  $0 platform <target> [os] [options]"
     printf '%s\n' "  $0 os <target> <platform-or-arch> [options]"
-    printf '%s\n' "  $0 rootfs <target> <arch> [options]"
+    printf '%s\n' "  $0 rootfs <target> [arch] [options]"
     printf '%s\n' "  $0 release <pack|github> [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
@@ -37,12 +37,14 @@ usage() {
     printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
     printf '%s\n' "  nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' "  all                  -> build all independent OS targets sequentially"
+    printf '%s\n' "  clean                -> clean all independent OS targets"
     printf '%s\n' ""
     printf '%s\n' "Rootfs Targets:"
     printf '%s\n' "  busybox              -> scripts/rootfs/busybox.sh"
     printf '%s\n' "  alpine               -> scripts/rootfs/alpine.sh"
     printf '%s\n' "  debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' "  all                  -> build all rootfs targets sequentially"
+    printf '%s\n' "  clean                -> clean all rootfs targets"
     printf '%s\n' ""
     printf '%s\n' "Release:"
     printf '%s\n' "  pack                 -> scripts/tools/pack.sh"
@@ -57,10 +59,13 @@ usage() {
     printf '%s\n' "  $0 os nimbos aarch64"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 os all <options>"
+    printf '%s\n' "  $0 os clean"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs debian riscv64 --out_dir IMAGES/rootfs"
+    printf '%s\n' "  $0 rootfs all"
     printf '%s\n' "  $0 rootfs all aarch64 --out_dir IMAGES/rootfs"
+    printf '%s\n' "  $0 rootfs clean"
     printf '%s\n' "  $0 release pack"
     printf '%s\n' "  $0 release github --token <TOKEN> --repo <owner/repo> --tag <tag>"
 }
@@ -209,6 +214,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         fi
                     done
                     ;;
+                clean)
+                    for os_target in arceos zephyr freertos rtthread nimbos; do
+                        echo "Cleaning OS target: $os_target"
+                        "$0" os "$os_target" clean || { echo "[ERROR] $os_target clean failed" >&2; exit 1; }
+                    done
+                    ;;
                 arceos|zephyr|freertos|rtthread|nimbos)
                     run_os_target "$target" "$@"
                     ;;
@@ -227,12 +238,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 all)
                     rootfs_args=("$@")
                     if [[ ${#rootfs_args[@]} -eq 0 ]]; then
-                        echo "[ERROR] rootfs all requires an architecture argument or clean" >&2
-                        exit 2
+                        rootfs_args=("all")
                     fi
                     for rootfs_target in busybox alpine debian; do
                         echo "Running rootfs target: $rootfs_target ${rootfs_args[*]}"
                         "$0" rootfs "$rootfs_target" "${rootfs_args[@]}" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
+                    done
+                    ;;
+                clean)
+                    rootfs_args=("$@")
+                    for rootfs_target in busybox alpine debian; do
+                        echo "Cleaning rootfs target: $rootfs_target ${rootfs_args[*]}"
+                        "$0" rootfs "$rootfs_target" clean "${rootfs_args[@]}" || { echo "[ERROR] $rootfs_target clean failed" >&2; exit 1; }
                     done
                     ;;
                 busybox|alpine|debian)

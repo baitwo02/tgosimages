@@ -86,12 +86,16 @@ nimbos_parse_args() {
 build_nimbos() {
     # Check if clean command
     if [[ "$NIMBOS_ARGS" == *"clean"* ]]; then
-        pushd "$NIMBOS_SRC_DIR" >/dev/null
-        info "Cleaning NimbOS: make -C kernel clean"
-        make -C kernel clean ARCH="${NIMBOS_PLATFORM}" || true
-        info "Cleaning user: make -C user clean"
-        make -C user clean ARCH="${NIMBOS_PLATFORM}" || true
-        popd >/dev/null
+        if [[ -d "$NIMBOS_SRC_DIR" ]]; then
+            pushd "$NIMBOS_SRC_DIR" >/dev/null
+            info "Cleaning NimbOS: make -C kernel clean"
+            make -C kernel clean ARCH="${NIMBOS_PLATFORM}" || true
+            info "Cleaning user: make -C user clean"
+            make -C user clean ARCH="${NIMBOS_PLATFORM}" || true
+            popd >/dev/null
+        else
+            info "Skipping NimbOS source clean; source directory not found: ${NIMBOS_SRC_DIR}"
+        fi
         
         # Clean BIOS for x86_64
         if [ "${NIMBOS_PLATFORM}" == "x86_64" ] && [ -d "$AXVM_BIOS_X86_SRC_DIR" ]; then
@@ -102,7 +106,7 @@ build_nimbos() {
         fi
         
         info "Removing ${NIMBOS_IMAGES_DIR}/*"
-        rm -rf ${NIMBOS_IMAGES_DIR}/* || true
+        rm -rf "${NIMBOS_IMAGES_DIR}"/* || true
         return 0
     fi
 
