@@ -152,9 +152,9 @@ Some platform builds require:
 ./build.sh help
 
 # Platform-oriented OS builds
-./build.sh os phytiumpi
-./build.sh os qemu-aarch64 linux
-./build.sh os qemu riscv64 all
+./build.sh platform phytiumpi
+./build.sh platform qemu-aarch64 linux
+./build.sh platform qemu riscv64 all
 
 # Rootfs builds
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs
@@ -162,15 +162,6 @@ Some platform builds require:
 
 # Release packaging
 ./build.sh release pack
-```
-
-Legacy shortcuts are still supported:
-
-```bash
-./build.sh phytiumpi
-./build.sh qemu-aarch64 linux
-./build.sh all
-./build.sh clean
 ```
 
 ### Direct Script Usage
@@ -253,13 +244,20 @@ Use `run.sh` for quick local QEMU validation:
 ./build.sh release pack
 
 # Or call the script directly
-scripts/tools/release.sh pack --in_dir IMAGES --out_dir release
+scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 ```
 
 ### Publish to GitHub Release
 
 ```bash
-scripts/tools/release.sh github \
+./build.sh release github \
+  --token <GITHUB_TOKEN> \
+  --repo arceos-hypervisor/axvisor-guest \
+  --tag v0.0.10 \
+  --dir release
+
+# Or call the script directly
+scripts/tools/github.sh \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
   --tag v0.0.10 \

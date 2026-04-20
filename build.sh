@@ -13,7 +13,7 @@ usage() {
     printf '%s\n' "  $0 platform <target> [os] [options]"
     printf '%s\n' "  $0 os <target> [options]"
     printf '%s\n' "  $0 rootfs <target> [options]"
-    printf '%s\n' "  $0 release [options]"
+    printf '%s\n' "  $0 release <pack|github> [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
     printf '%s\n' "Platform Targets:"
@@ -43,7 +43,8 @@ usage() {
     printf '%s\n' "  debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' ""
     printf '%s\n' "Release:"
-    printf '%s\n' "  release              -> scripts/tools/release.sh"
+    printf '%s\n' "  pack                 -> scripts/tools/pack.sh"
+    printf '%s\n' "  github               -> scripts/tools/github.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
     printf '%s\n' "  $0 platform phytiumpi"
@@ -56,6 +57,7 @@ usage() {
     printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs/rootfs-aarch64-alpine.img"
     printf '%s\n' "  $0 rootfs debian riscv64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 release pack"
+    printf '%s\n' "  $0 release github --token <TOKEN> --repo <owner/repo> --tag <tag>"
 }
 
 ensure_script() {
@@ -163,11 +165,22 @@ run_rootfs_target() {
 }
 
 run_release_target() {
-    local script_path="${TOOLS_DIR}/release.sh"
-    if [[ $# -eq 0 ]]; then
-        run_checked_script "$script_path" pack
-    fi
-    run_checked_script "$script_path" "$@"
+    local subcmd="${1:-pack}"
+    shift || true
+
+    case "$subcmd" in
+        pack)
+            run_checked_script "${TOOLS_DIR}/pack.sh" "$@"
+            ;;
+        github)
+            run_checked_script "${TOOLS_DIR}/github.sh" "$@"
+            ;;
+        *)
+            echo "[ERROR] Unknown release subcommand: $subcmd" >&2
+            usage
+            exit 2
+            ;;
+    esac
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

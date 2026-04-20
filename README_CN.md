@@ -152,9 +152,9 @@ sudo apt install \
 ./build.sh help
 
 # 平台 OS 构建
-./build.sh os phytiumpi
-./build.sh os qemu-aarch64 linux
-./build.sh os qemu riscv64 all
+./build.sh platform phytiumpi
+./build.sh platform qemu-aarch64 linux
+./build.sh platform qemu riscv64 all
 
 # rootfs 构建
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs
@@ -162,15 +162,6 @@ sudo apt install \
 
 # 打包
 ./build.sh release pack
-```
-
-旧兼容入口仍可使用：
-
-```bash
-./build.sh phytiumpi
-./build.sh qemu-aarch64 linux
-./build.sh all
-./build.sh clean
 ```
 
 ### 直接执行脚本
@@ -253,13 +244,20 @@ QEMU Linux 的典型文件包括：
 ./build.sh release pack
 
 # 或直接调用脚本
-scripts/tools/release.sh pack --in_dir IMAGES --out_dir release
+scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 ```
 
 ### 发布到 GitHub Release
 
 ```bash
-scripts/tools/release.sh github \
+./build.sh release github \
+  --token <GITHUB_TOKEN> \
+  --repo arceos-hypervisor/axvisor-guest \
+  --tag v0.0.10 \
+  --dir release
+
+# 或直接调用脚本
+scripts/tools/github.sh \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
   --tag v0.0.10 \
