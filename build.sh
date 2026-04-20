@@ -36,11 +36,13 @@ usage() {
     printf '%s\n' "  freertos             -> scripts/os/freertos.sh"
     printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
     printf '%s\n' "  nimbos               -> scripts/os/nimbos.sh"
+    printf '%s\n' "  all                  -> build all independent OS targets sequentially"
     printf '%s\n' ""
     printf '%s\n' "Rootfs Targets:"
     printf '%s\n' "  busybox              -> scripts/rootfs/busybox.sh"
     printf '%s\n' "  alpine               -> scripts/rootfs/alpine.sh"
     printf '%s\n' "  debian               -> scripts/rootfs/debian.sh"
+    printf '%s\n' "  all                  -> build all rootfs targets sequentially"
     printf '%s\n' ""
     printf '%s\n' "Release:"
     printf '%s\n' "  pack                 -> scripts/tools/pack.sh"
@@ -53,9 +55,11 @@ usage() {
     printf '%s\n' "  $0 platform qemu-aarch64 linux"
     printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
+    printf '%s\n' "  $0 os all <options>"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs debian riscv64 --out_dir IMAGES/rootfs"
+    printf '%s\n' "  $0 rootfs all aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 release pack"
     printf '%s\n' "  $0 release github --token <TOKEN> --repo <owner/repo> --tag <tag>"
 }
@@ -198,6 +202,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             shift || true
             [[ -n "$target" ]] || { echo "[ERROR] Missing OS target" >&2; usage; exit 2; }
             case "$target" in
+                all)
+                    for os_target in arceos zephyr freertos rtthread nimbos; do
+                        echo "Building OS target: $os_target $*"
+                        "$0" os "$os_target" "$@" || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
+                    done
+                    ;;
                 arceos|zephyr|freertos|rtthread|nimbos)
                     run_os_target "$target" "$@"
                     ;;
@@ -212,7 +222,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             target="${1:-}"
             shift || true
             [[ -n "$target" ]] || { echo "[ERROR] Missing rootfs target" >&2; usage; exit 2; }
-            run_rootfs_target "$target" "$@"
+            case "$target" in
+                all)
+                    [[ $# -gt 0 ]] || { echo "[ERROR] rootfs all requires an architecture argument" >&2; exit 2; }
+                    for rootfs_target in busybox alpine debian; do
+                        echo "Building rootfs target: $rootfs_target $*"
+                        "$0" rootfs "$rootfs_target" "$@" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
+                    done
+                    ;;
+                *)
+                    run_rootfs_target "$target" "$@"
+                    ;;
+            esac
             ;;
         release)
             run_release_target "$@"
