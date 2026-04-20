@@ -60,16 +60,11 @@ usage() {
     printf '%s\n' "  $0 release github --token <TOKEN> --repo <owner/repo> --tag <tag>"
 }
 
-ensure_script() {
-    local script_path="$1"
-    [[ -f "$script_path" ]] || { echo "[ERROR] Script not found: $script_path" >&2; exit 1; }
-    chmod +x "$script_path" 2>/dev/null || true
-}
-
 run_checked_script() {
     local script_path="$1"
     shift || true
-    ensure_script "$script_path"
+    [[ -f "$script_path" ]] || { echo "[ERROR] Script not found: $script_path" >&2; exit 1; }
+    chmod +x "$script_path" 2>/dev/null || true
     echo "Running: $script_path $*"
     exec "$script_path" "$@"
 }
