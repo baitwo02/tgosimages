@@ -12,6 +12,7 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 BUSYBOX_REPO_URL="${BUSYBOX_REPO_URL:-https://github.com/mirror/busybox.git}"
 BUSYBOX_SRC_DIR="${BUSYBOX_SRC_DIR:-${BUILD_DIR}/busybox}"
 BUSYBOX_PATCH_DIR="${BUSYBOX_PATCH_DIR:-${ROOT_DIR}/patches/busybox}"
+MKFS_ARCHES=("aarch64" "riscv64" "x86_64")
 
 # Global variables for parsed arguments
 MKFS_ARCH=""
@@ -29,10 +30,11 @@ mkfs_usage() {
     printf '  aarch64                       Build minimal filesystem for aarch64\n'
     printf '  riscv64                       Build minimal filesystem for riscv64\n'
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
+    printf '  all                           Build minimal filesystem for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
-    printf '  --out_dir <dir>               Output directory (default: IMAGES/rootfs)\n'
+    printf '  --out_dir <dir>               Output directory (default images: IMAGES/rootfs/{initramfs-<arch>-busybox.cpio.gz,rootfs-<arch>-busybox.img})\n'
     printf '  --guest <dir>                 Guest directory to copy into rootfs /guest\n'
     printf '\n'
     printf 'Environment Variables:\n'
@@ -43,9 +45,11 @@ mkfs_usage() {
     printf 'Notes:\n'
     printf '  * If BusyBox is dynamically linked, required shared libraries are copied automatically.\n'
     printf '  * The init script drops to an interactive shell after mounting basic pseudo filesystems.\n'
+    printf '  * The all command currently targets: aarch64, riscv64, x86_64.\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/rootfs/busybox.sh aarch64\n'
+    printf '  scripts/rootfs/busybox.sh all\n'
     printf '  scripts/rootfs/busybox.sh riscv64 --out_dir /tmp/output\n'
     printf '  scripts/rootfs/busybox.sh aarch64 --guest /path/to/guest/files\n'
 }
@@ -205,7 +209,7 @@ mkfs_pack_fs() {
     [[ -e bin/init ]] || ln -s ../init bin/init
 
     # 5. Pack ramfs
-    local abs_out="$OUTPUT_DIR/busybox-initramfs-${MKFS_ARCH}.cpio.gz"
+    local abs_out="$OUTPUT_DIR/initramfs-${MKFS_ARCH}-busybox.cpio.gz"
     echo "Packing ramfs -> $abs_out"
     chmod 755 . || true
     find . -print0 | sort -z 2>/dev/null | cpio --null -H newc -o 2>/dev/null | gzip -9 > "$abs_out"
@@ -213,7 +217,7 @@ mkfs_pack_fs() {
     du -h "$abs_out" | awk '{print "Size: "$1}'
 
     # 6. Pack ext4 rootfs.img
-    local img_out="$OUTPUT_DIR/busybox-rootfs-${MKFS_ARCH}.img"
+    local img_out="$OUTPUT_DIR/rootfs-${MKFS_ARCH}-busybox.img"
     local size_mb=32
     echo "Packing ext4 rootfs (debugfs write) -> $img_out"
     dd if=/dev/zero of="$img_out" bs=1M count=$size_mb status=none
@@ -263,16 +267,19 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             exit 0
             ;;
         aarch64|riscv64|x86_64)
+            mkfs_parse_args "$@"
             MKFS_ARCH="$cmd"
+            mkfs
+            ;;
+        all)
+            mkfs_parse_args "$@"
+            for arch in "${MKFS_ARCHES[@]}"; do
+                MKFS_ARCH="${arch}"
+                mkfs
+            done
             ;;
         *)
             die "Unknown command: $cmd"
             ;;
     esac
-
-    # Parse the other arguments
-    mkfs_parse_args "$@"
-
-    # Call the main function
-    mkfs
 fi

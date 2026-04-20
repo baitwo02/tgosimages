@@ -15,6 +15,7 @@ ALPINE_GUEST_DIR=""
 ALPINE_IMG_SIZE="${ALPINE_IMG_SIZE:-1G}"
 ALPINE_BASE="${ALPINE_BASE:-https://mirrors.cernet.edu.cn/alpine}"
 ALPINE_REL="${ALPINE_REL:-v3.23}"
+ALPINE_ARCHES=("aarch64" "loongarch64" "riscv64" "x86_64")
 
 # Global variables for parsed arguments
 ALPINE_URL=""
@@ -38,13 +39,14 @@ alpine_usage() {
     printf '\n'
     printf '<command>:\n'
     printf '  aarch64                       Build minimal filesystem for aarch64\n'
-    printf '  loongarch64                   Build minimal filesystem for loongarch64\n'
     printf '  riscv64                       Build minimal filesystem for riscv64\n'
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
+    printf '  loongarch64                   Build minimal filesystem for loongarch64\n'
+    printf '  all                           Build minimal filesystem for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
-    printf '  --out_dir <path>              Output image path (default: IMAGES/rootfs/alpine-rootfs-<arch>.img)\n'
+    printf '  --out_dir <path>              Output image path (default: IMAGES/rootfs/rootfs-<arch>-alpine.img)\n'
     printf '  --guest <dir>                 Guest directory to copy into rootfs /guest\n'
     printf '  --img-size <size>             Output image size (default: 1G)\n'
     printf '\n'
@@ -56,11 +58,13 @@ alpine_usage() {
     printf 'Notes:\n'
     printf '  * Generates rootfs.img only.\n'
     printf '  * Downloads Alpine minirootfs into build/alpine/<arch>/.\n'
+    printf '  * The all command currently targets: aarch64, loongarch64, riscv64, x86_64.\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/rootfs/alpine.sh aarch64\n'
-    printf '  scripts/rootfs/alpine.sh loongarch64 --out_dir /tmp/rootfs-loongarch64.img\n'
-    printf '  scripts/rootfs/alpine.sh riscv64 --out_dir /tmp/rootfs-riscv64.img\n'
+    printf '  scripts/rootfs/alpine.sh all\n'
+    printf '  scripts/rootfs/alpine.sh loongarch64 --out_dir /tmp/rootfs-loongarch64-alpine.img\n'
+    printf '  scripts/rootfs/alpine.sh riscv64 --out_dir /tmp/rootfs-riscv64-alpine.img\n'
     printf '  scripts/rootfs/alpine.sh x86_64 --img-size 2G\n'
     printf '  scripts/rootfs/alpine.sh aarch64 --guest /path/to/guest/files\n'
 }
@@ -88,9 +92,19 @@ alpine_parse_args() {
 }
 
 alpine_init_config() {
+    ALPINE_ARCHIVE=""
+    ALPINE_METADATA_ARCH=""
+    ALPINE_METADATA_DATE=""
+    ALPINE_METADATA_FILE=""
+    ALPINE_METADATA_SHA256=""
+    ALPINE_METADATA_SHA512=""
+    ALPINE_METADATA_SIZE=""
+    ALPINE_METADATA_TIME=""
+    ALPINE_METADATA_VERSION=""
+
     ALPINE_URL="${ALPINE_BASE}/${ALPINE_REL}/releases/${ALPINE_ARCH}"
     ALPINE_WORK_DIR="${BUILD_DIR}/alpine/${ALPINE_ARCH}"
-    ALPINE_ROOTFS_IMG="${ALPINE_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs/alpine-rootfs-${ALPINE_ARCH}.img}"
+    ALPINE_ROOTFS_IMG="${ALPINE_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs/rootfs-${ALPINE_ARCH}-alpine.img}"
 
     if [[ -n "${ALPINE_GUEST_DIR}" ]]; then
         ALPINE_GUEST_DIR="$(cd "${ALPINE_GUEST_DIR}" 2>/dev/null && pwd -P)" || {
@@ -387,13 +401,23 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             exit 0
             ;;
         aarch64|loongarch64|riscv64|x86_64)
+            alpine_parse_args "$@"
             ALPINE_ARCH="$cmd"
+            alpine
+            ;;
+        all)
+            alpine_parse_args "$@"
+            if [[ -n "${ALPINE_OUT_DIR}" ]]; then
+                die "--out_dir can only be used for a single architecture build"
+            fi
+
+            for arch in "${ALPINE_ARCHES[@]}"; do
+                ALPINE_ARCH="${arch}"
+                alpine
+            done
             ;;
         *)
             die "Unknown command: $cmd"
             ;;
     esac
-
-    alpine_parse_args "$@"
-    alpine
 fi

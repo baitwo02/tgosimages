@@ -39,7 +39,7 @@ debian_usage() {
     printf '  help, -h, --help              Display this help information\n'
     printf '\n'
     printf '[options]:\n'
-    printf '  --out_dir <dir>               Output directory (default: IMAGES/rootfs)\n'
+    printf '  --out_dir <dir>               Output directory (default image: IMAGES/rootfs/rootfs-<arch>-debian.img)\n'
     printf '  --output <path>               Output image path for single-arch build\n'
     printf '  --guest <dir>                 Guest directory to copy into rootfs /guest\n'
     printf '  --img-size <size>             Output image size (default: 2G)\n'
@@ -151,7 +151,7 @@ debian_init_config() {
         DEBIAN_ROOTFS_IMG="${DEBIAN_OUTPUT}"
     else
         local output_dir="${DEBIAN_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
-        DEBIAN_ROOTFS_IMG="${output_dir}/debian-rootfs-${DEBIAN_ARCH}.img"
+        DEBIAN_ROOTFS_IMG="${output_dir}/rootfs-${DEBIAN_ARCH}-debian.img"
     fi
 
     mkdir -p "$(dirname "${DEBIAN_ROOTFS_IMG}")" "${BUILD_DIR}/debian/${DEBIAN_ARCH}"
@@ -317,30 +317,6 @@ EOF_RESOLV
     success "Debian rootfs created: ${DEBIAN_ROOTFS_IMG}"
 }
 
-debian_build_one() {
-    DEBIAN_ARCH="$1"
-    debian_init_config
-    debian_validate_suite_support
-    debian_check_docker
-    debian_build_rootfs
-}
-
-debian_build_all() {
-    if [[ -n "${DEBIAN_OUTPUT}" ]]; then
-        die "--output can only be used for a single architecture build"
-    fi
-
-    debian_check_docker
-
-    local arch
-    for arch in "${DEBIAN_ARCHES[@]}"; do
-        DEBIAN_ARCH="${arch}"
-        debian_init_config
-        debian_validate_suite_support
-        debian_build_rootfs
-    done
-}
-
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift || true
@@ -352,11 +328,26 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
         aarch64|riscv64|x86_64|loongarch64)
             debian_parse_args "$@"
-            debian_build_one "${cmd}"
+            DEBIAN_ARCH="${cmd}"
+            debian_init_config
+            debian_validate_suite_support
+            debian_check_docker
+            debian_build_rootfs
             ;;
         all)
             debian_parse_args "$@"
-            debian_build_all
+            if [[ -n "${DEBIAN_OUTPUT}" ]]; then
+                die "--output can only be used for a single architecture build"
+            fi
+
+            debian_check_docker
+
+            for arch in "${DEBIAN_ARCHES[@]}"; do
+                DEBIAN_ARCH="${arch}"
+                debian_init_config
+                debian_validate_suite_support
+                debian_build_rootfs
+            done
             ;;
         *)
             die "Unknown command: ${cmd}"
