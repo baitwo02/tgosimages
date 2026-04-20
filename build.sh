@@ -8,20 +8,15 @@ OS_DIR="${SCRIPTS_DIR}/os"
 ROOTFS_DIR="${SCRIPTS_DIR}/rootfs"
 TOOLS_DIR="${SCRIPTS_DIR}/tools"
 
-PLATFORMS=(phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000)
-QEMU_TARGETS=(qemu-aarch64 qemu-x86_64 qemu-riscv64)
-ALL_PLATFORM_TARGETS=("${PLATFORMS[@]}" "${QEMU_TARGETS[@]}")
-COMMON_OS_TARGETS=(arceos zephyr freertos rtthread nimbos)
-
 usage() {
     printf '%s\n' "Usage:"
+    printf '%s\n' "  $0 platform <target> [os] [options]"
     printf '%s\n' "  $0 os <target> [options]"
     printf '%s\n' "  $0 rootfs <target> [options]"
     printf '%s\n' "  $0 release [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
-    printf '%s\n' "OS targets:"
-    printf '%s\n' "  platform targets:"
+    printf '%s\n' "platform targets:"
     printf '%s\n' "    phytiumpi            -> scripts/platform/phytiumpi.sh"
     printf '%s\n' "    roc-rk3568-pc        -> scripts/platform/roc-rk3568-pc.sh"
     printf '%s\n' "    evm3588              -> scripts/platform/evm3588.sh"
@@ -32,24 +27,29 @@ usage() {
     printf '%s\n' "    qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
     printf '%s\n' "    qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
     printf '%s\n' "    qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
-    printf '%s\n' "    all                  -> build all platform OS targets sequentially"
-    printf '%s\n' "    clean                -> clean all platform OS targets"
-    printf '%s\n' "  independent OS builders:"
+    printf '%s\n' "    all                  -> build all platform targets sequentially"
+    printf '%s\n' "    clean                -> clean all platform targets"
+    printf '%s\n' ""
+    printf '%s\n' "os targets:"
     printf '%s\n' "    arceos               -> scripts/os/arceos.sh"
     printf '%s\n' "    zephyr               -> scripts/os/zephyr.sh"
     printf '%s\n' "    freertos             -> scripts/os/freertos.sh"
     printf '%s\n' "    nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' ""
-    printf '%s\n' "Rootfs targets:"
+    printf '%s\n' "rootfs targets:"
     printf '%s\n' "    busybox              -> scripts/rootfs/busybox.sh"
     printf '%s\n' "    alpine               -> scripts/rootfs/alpine.sh"
     printf '%s\n' "    debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' ""
+    printf '%s\n' "Release:"
+    printf '%s\n' "  release                -> scripts/tools/release.sh"
+    printf '%s\n' ""
     printf '%s\n' "Examples:"
-    printf '%s\n' "  $0 os phytiumpi                  # build the default OS set defined by scripts/platform/phytiumpi.sh"
-    printf '%s\n' "  $0 os qemu-aarch64                # build QEMU aarch64 + busybox/alpine/debian rootfs"
-    printf '%s\n' "  $0 os qemu-aarch64 linux          # build only QEMU aarch64 Linux guest"
-    printf '%s\n' "  $0 os qemu riscv64 all --rootfs alpine,debian"
+    printf '%s\n' "  $0 platform phytiumpi             # build the default OS set for phytiumpi"
+    printf '%s\n' "  $0 platform phytiumpi linux       # build only Linux for phytiumpi"
+    printf '%s\n' "  $0 platform qemu-aarch64          # build QEMU aarch64 + busybox/alpine/debian rootfs"
+    printf '%s\n' "  $0 platform qemu-aarch64 linux    # build only QEMU aarch64 Linux guest"
+    printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
     printf '%s\n' "  $0 rootfs alpine aarch64 --out_dir IMAGES/rootfs/rootfs-aarch64-alpine.img"
@@ -111,13 +111,13 @@ run_platform_target() {
             ;;
         all)
             local extra_args=("$@")
-            for p in "${ALL_PLATFORM_TARGETS[@]}"; do
+            for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 echo "Building: $p ${extra_args[*]}"
                 "$0" os "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
             done
             ;;
         clean)
-            for p in "${ALL_PLATFORM_TARGETS[@]}"; do
+            for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 echo "Cleaning: $p"
                 "$0" os "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
             done
@@ -130,7 +130,7 @@ run_platform_target() {
     esac
 }
 
-run_common_os_target() {
+run_os_target() {
     local target="$1"
     shift || true
     local script_path="${OS_DIR}/${target}.sh"
@@ -192,15 +192,26 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             usage
             exit 0
             ;;
+        platform)
+            target="${1:-}"
+            shift || true
+            [[ -n "$target" ]] || { echo "[ERROR] Missing platform target" >&2; usage; exit 2; }
+            run_platform_target "$target" "$@"
+            ;;
         os)
             target="${1:-}"
             shift || true
             [[ -n "$target" ]] || { echo "[ERROR] Missing OS target" >&2; usage; exit 2; }
-            if [[ " ${COMMON_OS_TARGETS[*]} " == *" ${target} "* ]]; then
-                run_common_os_target "$target" "$@"
-            else
-                run_platform_target "$target" "$@"
-            fi
+            case "$target" in
+                arceos|zephyr|freertos|rtthread|nimbos)
+                    run_os_target "$target" "$@"
+                    ;;
+                *)
+                    echo "[ERROR] Unknown independent OS target: $target" >&2
+                    usage
+                    exit 2
+                    ;;
+            esac
             ;;
         rootfs)
             target="${1:-}"
