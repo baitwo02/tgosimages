@@ -16,39 +16,40 @@ usage() {
     printf '%s\n' "  $0 release [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
-    printf '%s\n' "platform targets:"
-    printf '%s\n' "    phytiumpi            -> scripts/platform/phytiumpi.sh"
-    printf '%s\n' "    roc-rk3568-pc        -> scripts/platform/roc-rk3568-pc.sh"
-    printf '%s\n' "    evm3588              -> scripts/platform/evm3588.sh"
-    printf '%s\n' "    tac-e400-plc         -> scripts/platform/tac-e400-plc.sh"
-    printf '%s\n' "    orangepi-5-plus      -> scripts/platform/orangepi-5-plus.sh"
-    printf '%s\n' "    rdk-s100p            -> scripts/platform/rdk-s100p.sh"
-    printf '%s\n' "    bst-a1000            -> scripts/platform/bst-a1000.sh"
-    printf '%s\n' "    qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
-    printf '%s\n' "    qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
-    printf '%s\n' "    qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
-    printf '%s\n' "    all                  -> build all platform targets sequentially"
-    printf '%s\n' "    clean                -> clean all platform targets"
+    printf '%s\n' "Platform Targets:"
+    printf '%s\n' "  phytiumpi            -> scripts/platform/phytiumpi.sh"
+    printf '%s\n' "  roc-rk3568-pc        -> scripts/platform/roc-rk3568-pc.sh"
+    printf '%s\n' "  evm3588              -> scripts/platform/evm3588.sh"
+    printf '%s\n' "  tac-e400-plc         -> scripts/platform/tac-e400-plc.sh"
+    printf '%s\n' "  orangepi-5-plus      -> scripts/platform/orangepi-5-plus.sh"
+    printf '%s\n' "  rdk-s100p            -> scripts/platform/rdk-s100p.sh"
+    printf '%s\n' "  bst-a1000            -> scripts/platform/bst-a1000.sh"
+    printf '%s\n' "  qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
+    printf '%s\n' "  qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
+    printf '%s\n' "  qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
+    printf '%s\n' "  all                  -> build all platform targets sequentially"
+    printf '%s\n' "  clean                -> clean all platform targets"
     printf '%s\n' ""
-    printf '%s\n' "os targets:"
-    printf '%s\n' "    arceos               -> scripts/os/arceos.sh"
-    printf '%s\n' "    zephyr               -> scripts/os/zephyr.sh"
-    printf '%s\n' "    freertos             -> scripts/os/freertos.sh"
-    printf '%s\n' "    nimbos               -> scripts/os/nimbos.sh"
+    printf '%s\n' "OS Targets:"
+    printf '%s\n' "  arceos               -> scripts/os/arceos.sh"
+    printf '%s\n' "  zephyr               -> scripts/os/zephyr.sh"
+    printf '%s\n' "  freertos             -> scripts/os/freertos.sh"
+    printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
+    printf '%s\n' "  nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' ""
-    printf '%s\n' "rootfs targets:"
-    printf '%s\n' "    busybox              -> scripts/rootfs/busybox.sh"
-    printf '%s\n' "    alpine               -> scripts/rootfs/alpine.sh"
-    printf '%s\n' "    debian               -> scripts/rootfs/debian.sh"
+    printf '%s\n' "Rootfs Targets:"
+    printf '%s\n' "  busybox              -> scripts/rootfs/busybox.sh"
+    printf '%s\n' "  alpine               -> scripts/rootfs/alpine.sh"
+    printf '%s\n' "  debian               -> scripts/rootfs/debian.sh"
     printf '%s\n' ""
     printf '%s\n' "Release:"
-    printf '%s\n' "  release                -> scripts/tools/release.sh"
+    printf '%s\n' "  release              -> scripts/tools/release.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
-    printf '%s\n' "  $0 platform phytiumpi             # build the default OS set for phytiumpi"
-    printf '%s\n' "  $0 platform phytiumpi linux       # build only Linux for phytiumpi"
-    printf '%s\n' "  $0 platform qemu-aarch64          # build QEMU aarch64 + busybox/alpine/debian rootfs"
-    printf '%s\n' "  $0 platform qemu-aarch64 linux    # build only QEMU aarch64 Linux guest"
+    printf '%s\n' "  $0 platform phytiumpi"
+    printf '%s\n' "  $0 platform phytiumpi linux"
+    printf '%s\n' "  $0 platform qemu-aarch64"
+    printf '%s\n' "  $0 platform qemu-aarch64 linux"
     printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
@@ -63,12 +64,18 @@ ensure_script() {
     chmod +x "$script_path" 2>/dev/null || true
 }
 
-run_script() {
+run_checked_script() {
     local script_path="$1"
     shift || true
     ensure_script "$script_path"
     echo "Running: $script_path $*"
     exec "$script_path" "$@"
+}
+
+run_script() {
+    local script_path="$1"
+    shift || true
+    run_checked_script "$script_path" "$@"
 }
 
 run_platform_target() {
@@ -78,34 +85,25 @@ run_platform_target() {
     case "$target" in
         phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000)
             local script_path="${PLATFORM_DIR}/${target}.sh"
-            ensure_script "$script_path"
             if [[ $# -eq 0 ]]; then
-                echo "Running: $script_path all"
-                exec "$script_path" all
+                run_checked_script "$script_path" all
             fi
-            echo "Running: $script_path $*"
-            exec "$script_path" "$@"
+            run_checked_script "$script_path" "$@"
             ;;
         qemu-aarch64|qemu-x86_64|qemu-riscv64)
             local arch="${target#qemu-}"
             local script_path="${PLATFORM_DIR}/qemu.sh"
-            ensure_script "$script_path"
             if [[ $# -eq 0 ]]; then
-                echo "Running: $script_path $arch all --rootfs busybox,alpine,debian"
-                exec "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
+                run_checked_script "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
             fi
-            echo "Running: $script_path $arch $*"
-            exec "$script_path" "$arch" "$@"
+            run_checked_script "$script_path" "$arch" "$@"
             ;;
         qemu)
             local arch="${1:-}"
             shift || true
             [[ -n "$arch" ]] || { echo "[ERROR] qemu requires an architecture: aarch64, x86_64, or riscv64" >&2; exit 2; }
             if [[ $# -eq 0 ]]; then
-                local script_path="${PLATFORM_DIR}/qemu.sh"
-                ensure_script "$script_path"
-                echo "Running: $script_path $arch all --rootfs busybox,alpine,debian"
-                exec "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
+                run_checked_script "${PLATFORM_DIR}/qemu.sh" "$arch" all --rootfs "busybox,alpine,debian"
             fi
             run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "$@"
             ;;
@@ -134,7 +132,6 @@ run_os_target() {
     local target="$1"
     shift || true
     local script_path="${OS_DIR}/${target}.sh"
-    ensure_script "$script_path"
     if [[ $# -eq 0 ]]; then
         case "$target" in
             arceos|zephyr|freertos|rtthread|nimbos)
@@ -143,28 +140,19 @@ run_os_target() {
                 ;;
         esac
     fi
-    echo "Running: $script_path $*"
-    exec "$script_path" "$@"
+    run_checked_script "$script_path" "$@"
 }
 
 run_rootfs_target() {
     local target="$1"
     shift || true
+    local script_path
 
     case "$target" in
-        busybox)
-            local script_path="${ROOTFS_DIR}/busybox.sh"
-            ensure_script "$script_path"
-            [[ $# -gt 0 ]] || { echo "[ERROR] busybox requires an architecture argument" >&2; exit 2; }
-            echo "Running: $script_path $*"
-            exec "$script_path" "$@"
-            ;;
-        alpine)
-            local script_path="${ROOTFS_DIR}/alpine.sh"
-            ensure_script "$script_path"
-            [[ $# -gt 0 ]] || { echo "[ERROR] alpine requires an architecture argument" >&2; exit 2; }
-            echo "Running: $script_path $*"
-            exec "$script_path" "$@"
+        busybox|alpine|debian)
+            script_path="${ROOTFS_DIR}/${target}.sh"
+            [[ $# -gt 0 ]] || { echo "[ERROR] ${target} requires an architecture argument" >&2; exit 2; }
+            run_checked_script "$script_path" "$@"
             ;;
         *)
             echo "[ERROR] Unknown rootfs target: $target" >&2
@@ -176,11 +164,10 @@ run_rootfs_target() {
 
 run_release_target() {
     local script_path="${TOOLS_DIR}/release.sh"
-    ensure_script "$script_path"
     if [[ $# -eq 0 ]]; then
-        exec "$script_path" pack
+        run_checked_script "$script_path" pack
     fi
-    exec "$script_path" "$@"
+    run_checked_script "$script_path" "$@"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
