@@ -11,8 +11,8 @@ TOOLS_DIR="${SCRIPTS_DIR}/tools"
 usage() {
     printf '%s\n' "Usage:"
     printf '%s\n' "  $0 platform <target> [os] [options]"
-    printf '%s\n' "  $0 os <target> [options]"
-    printf '%s\n' "  $0 rootfs <target> [options]"
+    printf '%s\n' "  $0 os <target> <platform-or-arch> [options]"
+    printf '%s\n' "  $0 rootfs <target> <arch> [options]"
     printf '%s\n' "  $0 release <pack|github> [options]"
     printf '%s\n' "  $0 help | -h | --help"
     printf '%s\n' ""
@@ -49,11 +49,12 @@ usage() {
     printf '%s\n' "  github               -> scripts/tools/github.sh"
     printf '%s\n' ""
     printf '%s\n' "Examples:"
-    printf '%s\n' "  $0 platform phytiumpi"
+    printf '%s\n' "  $0 platform phytiumpi             # show phytiumpi help"
     printf '%s\n' "  $0 platform phytiumpi linux"
-    printf '%s\n' "  $0 platform qemu-aarch64"
+    printf '%s\n' "  $0 platform qemu-aarch64          # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64 linux"
     printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
+    printf '%s\n' "  $0 os nimbos aarch64"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 os all <options>"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
@@ -87,7 +88,7 @@ run_platform_target() {
         phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000)
             local script_path="${PLATFORM_DIR}/${target}.sh"
             if [[ $# -eq 0 ]]; then
-                run_checked_script "$script_path" all
+                run_checked_script "$script_path"
             fi
             run_checked_script "$script_path" "$@"
             ;;
@@ -95,16 +96,16 @@ run_platform_target() {
             local arch="${target#qemu-}"
             local script_path="${PLATFORM_DIR}/qemu.sh"
             if [[ $# -eq 0 ]]; then
-                run_checked_script "$script_path" "$arch" all --rootfs "busybox,alpine,debian"
+                run_checked_script "$script_path"
             fi
             run_checked_script "$script_path" "$arch" "$@"
             ;;
         qemu)
             local arch="${1:-}"
             shift || true
-            [[ -n "$arch" ]] || { echo "[ERROR] qemu requires an architecture: aarch64, x86_64, or riscv64" >&2; exit 2; }
+            [[ -n "$arch" ]] || run_checked_script "${PLATFORM_DIR}/qemu.sh"
             if [[ $# -eq 0 ]]; then
-                run_checked_script "${PLATFORM_DIR}/qemu.sh" "$arch" all --rootfs "busybox,alpine,debian"
+                run_checked_script "${PLATFORM_DIR}/qemu.sh" "$arch"
             fi
             run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "$@"
             ;;
@@ -121,11 +122,6 @@ run_platform_target() {
                 "$0" platform "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
             done
             ;;
-        *)
-            echo "[ERROR] Unknown OS target: $target" >&2
-            usage
-            exit 2
-            ;;
     esac
 }
 
@@ -133,34 +129,14 @@ run_os_target() {
     local target="$1"
     shift || true
     local script_path="${OS_DIR}/${target}.sh"
-    if [[ $# -eq 0 ]]; then
-        case "$target" in
-            arceos|zephyr|freertos|rtthread|nimbos)
-                echo "[ERROR] $target requires explicit arguments; see its script usage." >&2
-                exit 2
-                ;;
-        esac
-    fi
     run_checked_script "$script_path" "$@"
 }
 
 run_rootfs_target() {
     local target="$1"
     shift || true
-    local script_path
-
-    case "$target" in
-        busybox|alpine|debian)
-            script_path="${ROOTFS_DIR}/${target}.sh"
-            [[ $# -gt 0 ]] || { echo "[ERROR] ${target} requires an architecture argument" >&2; exit 2; }
-            run_checked_script "$script_path" "$@"
-            ;;
-        *)
-            echo "[ERROR] Unknown rootfs target: $target" >&2
-            usage
-            exit 2
-            ;;
-    esac
+    local script_path="${ROOTFS_DIR}/${target}.sh"
+    run_checked_script "$script_path" "$@"
 }
 
 run_release_target() {
@@ -195,7 +171,16 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             target="${1:-}"
             shift || true
             [[ -n "$target" ]] || { echo "[ERROR] Missing platform target" >&2; usage; exit 2; }
-            run_platform_target "$target" "$@"
+            case "$target" in
+                phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000|qemu-aarch64|qemu-x86_64|qemu-riscv64|qemu|all|clean)
+                    run_platform_target "$target" "$@"
+                    ;;
+                *)
+                    echo "[ERROR] Unknown platform target: $target" >&2
+                    usage
+                    exit 2
+                    ;;
+            esac
             ;;
         os)
             target="${1:-}"
@@ -230,8 +215,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         "$0" rootfs "$rootfs_target" "$@" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
                     done
                     ;;
-                *)
+                busybox|alpine|debian)
                     run_rootfs_target "$target" "$@"
+                    ;;
+                *)
+                    echo "[ERROR] Unknown rootfs target: $target" >&2
+                    usage
+                    exit 2
                     ;;
             esac
             ;;
