@@ -113,13 +113,13 @@ run_platform_target() {
             local extra_args=("$@")
             for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 echo "Building: $p ${extra_args[*]}"
-                "$0" os "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
             done
             ;;
         clean)
             for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 echo "Cleaning: $p"
-                "$0" os "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
+                "$0" platform "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
             done
             ;;
         *)
