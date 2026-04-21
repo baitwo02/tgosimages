@@ -15,6 +15,12 @@ DEBIAN_OUTPUT=""
 DEBIAN_IMG_SIZE="${DEBIAN_IMG_SIZE:-1G}"
 DEBIAN_SUITE="${DEBIAN_SUITE:-trixie}"
 DEBIAN_PASSWORD="${DEBIAN_PASSWORD:-root}"
+DEBIAN_DEFAULT_PACKAGES=(
+    binutils
+    gcc
+    musl-dev
+    libusb-1.0-0-dev
+)
 
 DEBIAN_DOCKER_IMAGE=""
 DEBIAN_DOCKER_PLATFORM=""
@@ -215,7 +221,7 @@ EOF_PASSWD
 
             chroot \"\$ROOTFS\" apt-get update
             chroot \"\$ROOTFS\" apt-get install -y --reinstall libc6
-            chroot \"\$ROOTFS\" apt-get install -y busybox-static bash
+            chroot \"\$ROOTFS\" apt-get install -y busybox-static bash ${DEBIAN_DEFAULT_PACKAGES[*]}
 
             if [ ! -e \"\$ROOTFS/sbin/init\" ]; then
                 ln -sf /bin/busybox \"\$ROOTFS/sbin/init\"

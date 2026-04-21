@@ -16,6 +16,12 @@ ALPINE_IMG_SIZE="${ALPINE_IMG_SIZE:-1G}"
 ALPINE_BASE="${ALPINE_BASE:-https://mirrors.cernet.edu.cn/alpine}"
 ALPINE_REL="${ALPINE_REL:-v3.23}"
 ALPINE_ARCHES=("aarch64" "loongarch64" "riscv64" "x86_64")
+ALPINE_DEFAULT_PACKAGES=(
+    binutils
+    gcc
+    musl-dev
+    libusb-dev
+)
 
 # Global variables for parsed arguments
 ALPINE_URL=""
@@ -322,6 +328,81 @@ alpine_copy_guest_dir() {
     fi
 }
 
+alpine_install_default_packages() {
+    local rootfs_dir="$1"
+    local host_uid
+    local host_gid
+    local docker_platform
+    local apk_args=(
+        --root "${rootfs_dir}"
+        --arch "${ALPINE_ARCH}"
+        --repositories-file "${rootfs_dir}/etc/apk/repositories"
+        --keys-dir "${rootfs_dir}/etc/apk/keys"
+        --no-cache
+        --update-cache
+        --no-scripts
+        add
+        "${ALPINE_DEFAULT_PACKAGES[@]}"
+    )
+
+    info "Installing default Alpine packages: ${ALPINE_DEFAULT_PACKAGES[*]}"
+    if command -v apk >/dev/null 2>&1; then
+        apk "${apk_args[@]}"
+        return
+    fi
+
+    if ! command -v docker >/dev/null 2>&1; then
+        die "Neither apk nor docker is available to install default Alpine packages"
+    fi
+
+    host_uid="$(id -u)"
+    host_gid="$(id -g)"
+    case "$(uname -m)" in
+        x86_64) docker_platform="linux/amd64" ;;
+        aarch64|arm64) docker_platform="linux/arm64/v8" ;;
+        riscv64) docker_platform="linux/riscv64" ;;
+        loongarch64) docker_platform="linux/loong64" ;;
+        *) docker_platform="" ;;
+    esac
+
+    docker run --rm \
+        ${docker_platform:+--platform "${docker_platform}"} \
+        -v "${rootfs_dir}:/rootfs" \
+        "alpine:${ALPINE_REL#v}" \
+        sh -lc "
+            set -e
+            apk \
+                --root /rootfs \
+                --arch '${ALPINE_ARCH}' \
+                --repositories-file /rootfs/etc/apk/repositories \
+                --keys-dir /rootfs/etc/apk/keys \
+                --no-cache \
+                --update-cache \
+                --no-scripts \
+                add ${ALPINE_DEFAULT_PACKAGES[*]}
+            chown -R ${host_uid}:${host_gid} /rootfs
+        "
+}
+
+alpine_cleanup_rootfs_dir() {
+    local rootfs_dir="$1"
+
+    [[ -d "${rootfs_dir}" ]] || return 0
+    rm -rf "${rootfs_dir}" && return 0
+
+    warn "Local cleanup failed for ${rootfs_dir}, retrying via Docker"
+    if ! command -v docker >/dev/null 2>&1; then
+        warn "Docker is unavailable, leaving temporary directory behind: ${rootfs_dir}"
+        return 0
+    fi
+
+    docker run --rm \
+        -v "$(dirname "${rootfs_dir}"):/work" \
+        "alpine:${ALPINE_REL#v}" \
+        sh -lc "rm -rf '/work/$(basename "${rootfs_dir}")'" >/dev/null 2>&1 || \
+        warn "Failed to clean temporary directory via Docker: ${rootfs_dir}"
+}
+
 alpine_download_archive() {
     if [[ -f "${ALPINE_ARCHIVE}" ]]; then
         info "Using cached Alpine minirootfs archive: ${ALPINE_ARCHIVE}"
@@ -342,7 +423,7 @@ alpine_download_archive() {
 alpine_create_rootfs() {
     local rootfs_dir
     rootfs_dir="$(mktemp -d "${ALPINE_WORK_DIR}/rootfs.XXXXXX")"
-    trap 'rm -rf "'"${rootfs_dir}"'"' EXIT
+    trap 'alpine_cleanup_rootfs_dir "'"${rootfs_dir}"'"' EXIT
 
     info "Creating Alpine rootfs image ${ALPINE_ROOTFS_IMG} (${ALPINE_IMG_SIZE})"
     rm -f "${ALPINE_ROOTFS_IMG}"
@@ -358,6 +439,7 @@ alpine_create_rootfs() {
 
     sed -i "s#https\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_BASE}#g" \
         "${rootfs_dir}/etc/apk/repositories"
+    alpine_install_default_packages "${rootfs_dir}"
 
     if ! command -v debugfs >/dev/null 2>&1; then
         die "debugfs not found. Please install e2fsprogs"
@@ -382,7 +464,7 @@ alpine_create_rootfs() {
     )
 
     trap - EXIT
-    rm -rf "${rootfs_dir}"
+    alpine_cleanup_rootfs_dir "${rootfs_dir}"
 
     success "Alpine rootfs created: ${ALPINE_ROOTFS_IMG}"
 }
