@@ -30,7 +30,8 @@ DEBIAN_DPKG_ARCH=""
 DEBIAN_TARGET=""
 DEBIAN_ROOTFS_IMG=""
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://deb.debian.org/debian}"
-DEBIAN_ARCHES=("aarch64" "riscv64" "x86_64" "loongarch64")
+DEBIAN_ARCHES=("aarch64" "riscv64" "x86_64")
+# DEBIAN_ARCHES=("aarch64" "riscv64" "x86_64" "loongarch64")
 
 debian_usage() {
     printf 'Build Debian-based rootfs image\n'
@@ -42,7 +43,7 @@ debian_usage() {
     printf '  aarch64                       Build Debian rootfs for aarch64\n'
     printf '  riscv64                       Build Debian rootfs for riscv64\n'
     printf '  x86_64                        Build Debian rootfs for x86_64\n'
-    printf '  loongarch64                   Build Debian rootfs for loongarch64\n'
+    # printf '  loongarch64                   Build Debian rootfs for loongarch64\n'
     printf '  all                           Build Debian rootfs for all supported architectures\n'
     printf '  clean                         Clean generated images for all supported architectures\n'
     printf '  help, -h, --help              Display this help information\n'
@@ -64,14 +65,14 @@ debian_usage() {
     printf 'Notes:\n'
     printf '  * Uses Docker + debootstrap to generate an ext4 rootfs image.\n'
     printf '  * Defaults to Debian trixie because riscv64 is not reliably available in bookworm here.\n'
-    printf '  * The all command currently targets: aarch64, riscv64, x86_64, loongarch64.\n'
-    printf '  * Debian 13 (trixie) does not currently ship loong64 packages in the main archive.\n'
+    printf '  * The all command currently targets: aarch64, riscv64, x86_64.\n'
+    # printf '  * Debian 13 (trixie) does not currently ship loong64 packages in the main archive.\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/rootfs/debian.sh aarch64\n'
     printf '  scripts/rootfs/debian.sh riscv64 --debian trixie --img-size 3G\n'
     printf '  scripts/rootfs/debian.sh x86_64 --out_dir /tmp/rootfs\n'
-    printf '  scripts/rootfs/debian.sh loongarch64 --guest /path/to/guest/files\n'
+    # printf '  scripts/rootfs/debian.sh loongarch64 --guest /path/to/guest/files\n'
     printf '  scripts/rootfs/debian.sh all --out_dir IMAGES/rootfs\n'
 }
 
@@ -337,8 +338,8 @@ debian_clean_outputs() {
     rm -f \
         "${output_dir}/rootfs-aarch64-debian.img" \
         "${output_dir}/rootfs-riscv64-debian.img" \
-        "${output_dir}/rootfs-x86_64-debian.img" \
-        "${output_dir}/rootfs-loongarch64-debian.img"
+        "${output_dir}/rootfs-x86_64-debian.img"
+        # "${output_dir}/rootfs-loongarch64-debian.img"
     success "Debian rootfs outputs cleaned in ${output_dir}"
 }
 
@@ -351,7 +352,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             debian_usage
             exit 0
             ;;
-        aarch64|riscv64|x86_64|loongarch64)
+        aarch64|riscv64|x86_64)
+        # aarch64|riscv64|x86_64|loongarch64)
             debian_parse_args "$@"
             DEBIAN_ARCH="${cmd}"
             debian_init_config
