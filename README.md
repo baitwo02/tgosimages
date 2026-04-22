@@ -212,8 +212,8 @@ Artifacts are collected under `IMAGES/`. Common locations include:
 
 | Path | Contents |
 | --- | --- |
-| `IMAGES/qemu/linux/<arch>` | QEMU Linux kernel plus matching rootfs artifacts |
-| `IMAGES/qemu/arceos/<arch>` | QEMU ArceOS binaries |
+| `IMAGES/qemu-<arch>/linux` | QEMU Linux kernel artifacts for the given architecture |
+| `IMAGES/qemu-<arch>/arceos` | QEMU ArceOS binaries for the given architecture |
 | `IMAGES/rootfs` | Standalone rootfs images generated directly by rootfs scripts |
 | `IMAGES/<platform>/linux` | Linux artifacts for a hardware platform |
 | `IMAGES/<platform>/arceos` | ArceOS artifacts for a hardware platform |
@@ -234,7 +234,7 @@ Use `run.sh` for quick local QEMU validation:
 ./run.sh x86_64 rootfs
 ```
 
-`run.sh` expects kernel and rootfs artifacts under `IMAGES/qemu/linux/<arch>/`.
+QEMU platform build outputs now live under `IMAGES/qemu-<arch>/`.
 
 ## Packaging and Release
 

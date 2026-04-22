@@ -13,7 +13,6 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 LINUX_REPO_URL="https://github.com/torvalds/linux.git"
 LINUX_SRC_DIR="${BUILD_DIR}/qemu_linux"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/qemu"
-IMAGES_BASE_DIR="${ROOT_DIR}/IMAGES/qemu"
 ROOTFS_IMAGES_DIR="${ROOT_DIR}/IMAGES/rootfs"
 ROOTFS_BUILDERS=()
 BUILD_ARGS=()
@@ -58,6 +57,11 @@ usage() {
     printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
     printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
     printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'
+}
+
+qemu_arch_images_dir() {
+    local arch="$1"
+    printf '%s\n' "${ROOT_DIR}/IMAGES/qemu-${arch}"
 }
 
 build_rootfs_one() {
@@ -212,7 +216,7 @@ linux() {
 
         # If it's a full build, copy the image and create the root filesystem
         if [[ ${#commands[@]} -eq 0 ]] || [[ "${commands[0]}" == "all" ]]; then
-            LINUX_IMAGES_DIR="${IMAGES_BASE_DIR}/${ARCH}/linux"
+            LINUX_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/linux"
             mkdir -p "${LINUX_IMAGES_DIR}"
             KIMG_PATH="${LINUX_SRC_DIR}/${kimg_subpath}"
             [[ -f "${KIMG_PATH}" ]] || die "Kernel image not found: ${KIMG_PATH}"
@@ -224,9 +228,9 @@ linux() {
     else
         info "Building Linux: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} clean"
         make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "clean"
-        LINUX_IMAGES_DIR="${IMAGES_BASE_DIR}/${ARCH}/linux"
+        LINUX_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/linux"
         info "Removing ${LINUX_IMAGES_DIR}/*"
-        rm -rf ${LINUX_IMAGES_DIR}/* || true
+        rm -rf "${LINUX_IMAGES_DIR}"/* || true
     fi
 }
 
@@ -246,7 +250,7 @@ arceos() {
             ;;
     esac
 
-    ARCEOS_IMAGES_DIR="${IMAGES_BASE_DIR}/${ARCH}/arceos"
+    ARCEOS_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/arceos"
     info "Building ArceOS using common arceos.sh script for platform: $platform -> $ARCEOS_IMAGES_DIR"
     
     # Call the arceos.sh script with proper parameters
@@ -258,18 +262,33 @@ arceos() {
 }
 
 nimbos() {
-    local nimbos_images_dir="${IMAGES_BASE_DIR}/${ARCH}/nimbos"
+    local qemu_images_dir
+    local nimbos_images_dir
+    local legacy_nimbos_images_dir
+
+    qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
+    nimbos_images_dir="${qemu_images_dir}/nimbos"
+    legacy_nimbos_images_dir="${ROOT_DIR}/IMAGES/qemu/${ARCH}/nimbos"
 
     # Call the nimbos.sh script with proper parameters
-    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" "--images-dir" "$IMAGES_BASE_DIR" "$@"
+    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" "--images-dir" "${ROOT_DIR}/IMAGES/qemu" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
+        if [[ -d "${legacy_nimbos_images_dir}" ]]; then
+            mkdir -p "${qemu_images_dir}"
+            rm -rf "${nimbos_images_dir}"
+            mv "${legacy_nimbos_images_dir}" "${nimbos_images_dir}"
+        fi
         package_os_into_rootfs "nimbos" "${nimbos_images_dir}"
+    else
+        rm -rf "${legacy_nimbos_images_dir}" "${nimbos_images_dir}" || true
     fi
 }
 
 zephyr() {
-    local zephyr_images_dir="${IMAGES_BASE_DIR}/${ARCH}/zephyr"
+    local zephyr_images_dir
+
+    zephyr_images_dir="$(qemu_arch_images_dir "${ARCH}")/zephyr"
 
     if [[ "${ARCH}" != "aarch64" ]]; then
         die "Zephyr guest build is currently only supported for qemu aarch64"
@@ -283,7 +302,11 @@ zephyr() {
 }
 
 freertos() {
-    local freertos_images_dir="${IMAGES_BASE_DIR}/${ARCH}/freertos"
+    local qemu_images_dir
+    local freertos_images_dir
+
+    qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
+    freertos_images_dir="${qemu_images_dir}/freertos"
 
     if [[ "${ARCH}" != "aarch64" ]]; then
         die "FreeRTOS guest build is currently only supported for qemu aarch64"
@@ -291,14 +314,15 @@ freertos() {
 
     if [[ "$@" != *"clean"* ]]; then
         bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64
-        if [[ -d "${ROOT_DIR}/IMAGES/qemu/freertos" && ! -d "${freertos_images_dir}" ]]; then
-            mkdir -p "$(dirname "${freertos_images_dir}")"
+        if [[ -d "${ROOT_DIR}/IMAGES/qemu/freertos" ]]; then
+            mkdir -p "${qemu_images_dir}"
             rm -rf "${freertos_images_dir}"
             mv "${ROOT_DIR}/IMAGES/qemu/freertos" "${freertos_images_dir}"
         fi
         package_os_into_rootfs "freertos" "${freertos_images_dir}"
     else
         bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean
+        rm -rf "${ROOT_DIR}/IMAGES/qemu/freertos" || true
         rm -rf "${freertos_images_dir}" || true
     fi
 }

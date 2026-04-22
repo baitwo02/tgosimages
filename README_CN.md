@@ -212,8 +212,8 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 
 | 路径 | 内容 |
 | --- | --- |
-| `IMAGES/qemu/linux/<arch>` | QEMU Linux 内核及配套 rootfs 产物 |
-| `IMAGES/qemu/arceos/<arch>` | QEMU ArceOS 二进制 |
+| `IMAGES/qemu-<arch>/linux` | 对应架构的 QEMU Linux 内核产物 |
+| `IMAGES/qemu-<arch>/arceos` | 对应架构的 QEMU ArceOS 二进制 |
 | `IMAGES/rootfs` | 直接由 rootfs 脚本生成的独立镜像 |
 | `IMAGES/<platform>/linux` | 某硬件平台的 Linux 产物 |
 | `IMAGES/<platform>/arceos` | 某硬件平台的 ArceOS 产物 |
@@ -234,7 +234,7 @@ QEMU Linux 的典型文件包括：
 ./run.sh x86_64 rootfs
 ```
 
-`run.sh` 约定内核与 rootfs 位于 `IMAGES/qemu/linux/<arch>/`。
+QEMU 平台构建产物现在统一位于 `IMAGES/qemu-<arch>/` 下。
 
 ## 打包与发布
 
