@@ -332,6 +332,7 @@ parse_common_args() {
     ROOTFS_BUILDERS=()
     local builder
     local seen
+    local -A rootfs_seen=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -342,6 +343,8 @@ parse_common_args() {
                     [[ -n "${builder}" ]] || continue
                     case "${builder}" in
                         busybox|alpine|debian)
+                            [[ -n "${rootfs_seen[${builder}]:-}" ]] && continue
+                            rootfs_seen["${builder}"]=1
                             ROOTFS_BUILDERS+=("${builder}")
                             ;;
                         *)
