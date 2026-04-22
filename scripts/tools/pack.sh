@@ -27,9 +27,9 @@ pack_usage() {
     printf '\n'
     printf 'Notes:\n'
     printf '  * Default mode is release-oriented:\n'
-    printf '      - each file under <dir>/rootfs becomes its own .tar.gz archive\n'
-    printf '      - each non-rootfs direct child of <dir> becomes its own .tar.gz archive\n'
-    printf '  * With --per-file, each direct child of <dir> is packaged into an individual .tar.gz archive.\n'
+    printf '      - each file under <dir>/rootfs becomes its own .tar.xz archive\n'
+    printf '      - each non-rootfs direct child of <dir> becomes its own .tar.xz archive\n'
+    printf '  * With --per-file, each direct child of <dir> is packaged into an individual .tar.xz archive.\n'
     printf '  * Direct children can be either files or directories.\n'
     printf '\n'
     printf 'Examples:\n'
@@ -74,17 +74,25 @@ normalize_dir_path() {
     fi
 }
 
+pack_tar_with_xz() {
+    local out_path="$1"
+    shift
+
+    # Use strong xz compression to improve the ratio for single large image files.
+    tar -I 'xz -T0 -9e' -cf "${out_path}" "$@"
+}
+
 pack_path() {
     local source_path="$1"
     local package_stem="$2"
-    local out_path="${RELEASE_DIR}/${package_stem}.tar.gz"
+    local out_path="${RELEASE_DIR}/${package_stem}.tar.xz"
 
     info "Packing ${source_path} -> ${out_path}"
 
     if [[ -d "${source_path}" ]]; then
-        tar -czf "${out_path}" -C "${source_path}" .
+        pack_tar_with_xz "${out_path}" -C "${source_path}" .
     else
-        tar -czf "${out_path}" -C "$(dirname "${source_path}")" "$(basename "${source_path}")"
+        pack_tar_with_xz "${out_path}" -C "$(dirname "${source_path}")" "$(basename "${source_path}")"
     fi
 }
 

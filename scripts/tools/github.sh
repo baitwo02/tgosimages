@@ -194,6 +194,8 @@ github_upload() {
 strip_archive_suffix() {
     local file_name="$1"
 
+    file_name="${file_name%.tar.xz}"
+    file_name="${file_name%.txz}"
     file_name="${file_name%.tar.gz}"
     file_name="${file_name%.tgz}"
     printf '%s\n' "${file_name}"
