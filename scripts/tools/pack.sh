@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 
 IMAGES_DIR="${ROOT_DIR}/IMAGES"
 RELEASE_DIR="${ROOT_DIR}/release"
-PACK_MODE="directory"
+PACK_PER_FILE=0
 
 pack_usage() {
     printf 'Package image artifacts into release archives\n'
@@ -22,13 +22,12 @@ pack_usage() {
     printf '[options]:\n'
     printf '  --in_dir, --input_dir, -i <dir>   Directory containing images (default: IMAGES)\n'
     printf '  --out_dir, --output_dir, -o <dir> Output directory for packaged archives (default: release)\n'
-    printf '  --mode <directory|file>           Packaging mode (default: directory)\n'
     printf '  --per-file                        Package each direct child of <dir> into its own archive\n'
     printf '  help, -h, --help                  Display this help information\n'
     printf '\n'
     printf 'Notes:\n'
-    printf '  * directory mode packages all direct children of <dir> into one .tar.gz archive.\n'
-    printf '  * file mode packages each direct child of <dir> into an individual .tar.gz archive.\n'
+    printf '  * By default, all direct children of <dir> are packaged into one .tar.gz archive.\n'
+    printf '  * With --per-file, each direct child of <dir> is packaged into an individual .tar.gz archive.\n'
     printf '  * Direct children can be either files or directories.\n'
     printf '\n'
     printf 'Examples:\n'
@@ -48,12 +47,8 @@ pack_parse_args() {
                 RELEASE_DIR="$2"
                 shift 2
                 ;;
-            --mode)
-                PACK_MODE="$2"
-                shift 2
-                ;;
             --per-file)
-                PACK_MODE="file"
+                PACK_PER_FILE=1
                 shift
                 ;;
             -h|--help|help)
@@ -91,17 +86,6 @@ pack_path() {
     fi
 }
 
-is_valid_pack_mode() {
-    case "$1" in
-        directory|file)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
-
 pack_child_paths() {
     local source_dir="$1"
     local child_path
@@ -128,7 +112,7 @@ pack_images() {
     while IFS= read -r child_path; do
         [[ -n "${child_path}" ]] || continue
         child_count=$((child_count + 1))
-        if [[ "${PACK_MODE}" == "file" ]]; then
+        if [[ ${PACK_PER_FILE} -eq 1 ]]; then
             package_stem="$(basename "${child_path}")"
             pack_path "${child_path}" "${package_stem}"
             count_packed=$((count_packed + 1))
@@ -138,7 +122,7 @@ pack_images() {
     if [[ ${child_count} -eq 0 ]]; then
         warn "Skipping empty directory ${IMAGES_DIR}"
         count_skipped=$((count_skipped + 1))
-    elif [[ "${PACK_MODE}" == "directory" ]]; then
+    elif [[ ${PACK_PER_FILE} -eq 0 ]]; then
         info "Packing contents of ${IMAGES_DIR} -> ${RELEASE_DIR}/${input_basename}.tar.gz"
         tar -czf "${RELEASE_DIR}/${input_basename}.tar.gz" -C "${IMAGES_DIR}" .
         count_packed=$((count_packed + 1))
@@ -158,14 +142,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     IMAGES_DIR="$(normalize_dir_path "${IMAGES_DIR}")"
     RELEASE_DIR="$(normalize_dir_path "${RELEASE_DIR}")"
 
-    if ! is_valid_pack_mode "${PACK_MODE}"; then
-        die "Invalid pack mode: ${PACK_MODE}. Supported values: directory, file"
-    fi
-
     if [[ ! -d "${IMAGES_DIR}" ]]; then
         die "Input directory does not exist: ${IMAGES_DIR}"
     fi
 
-    info "Starting to package system images under ${IMAGES_DIR} with mode=${PACK_MODE} ..."
+    info "Starting to package system images under ${IMAGES_DIR} (per-file=${PACK_PER_FILE}) ..."
     pack_images
 fi
