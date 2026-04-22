@@ -88,6 +88,16 @@ run_script() {
     run_checked_script "$script_path" "$@"
 }
 
+has_rootfs_override() {
+    local arg
+    for arg in "$@"; do
+        if [[ "$arg" == "--rootfs" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 run_platform_target() {
     local target="$1"
     shift || true
@@ -104,6 +114,7 @@ run_platform_target() {
             local qemu_cmd
             local script_path="${PLATFORM_DIR}/qemu.sh"
             local qemu_arch=""
+            local qemu_args=("$@")
             if [[ "$target" == "qemu" ]]; then
                 qemu_cmd="all"
             else
@@ -114,7 +125,10 @@ run_platform_target() {
             if [[ $# -eq 0 ]]; then
                 run_checked_script "$script_path"
             fi
-            run_checked_script "$script_path" "$qemu_cmd" "$@"
+            if ! has_rootfs_override "${qemu_args[@]}"; then
+                qemu_args+=(--rootfs "busybox,alpine,debian")
+            fi
+            run_checked_script "$script_path" "$qemu_cmd" "${qemu_args[@]}"
             ;;
         all)
             local extra_args=("$@")
