@@ -16,8 +16,8 @@ RTTHREAD_PATCH_DIR="${RTTHREAD_PATCH_DIR:-${ROOT_DIR}/patches/rtthread}"
 # Global variables for parsed arguments
 RTTHREAD_PLATFORM_DIR=""
 RTTHREAD_PLATFORM_BIN_NAME=""
-RTTHREAD_BIN_DIR="IMAGES/rtthread"
-RTTHREAD_BIN_NAME="rtthread"
+RTTHREAD_IMAGES_DIR="IMAGES/rtthread"
+RTTHREAD_IMAGE_NAME=""
 RTTHREAD_ARGS=""
 
 rtthread_usage() {
@@ -37,8 +37,8 @@ rtthread_usage() {
     printf '  --repo-url <url>              RT-Thread repository URL (default: https://github.com/RT-Thread/rt-thread.git)\n'
     printf '  --src-dir <dir>               Source directory (default: build/rtthread)\n'
     printf '  --patch-dir <dir>             Patch directory (default: patches/rtthread)\n'
-    printf '  --bin-dir <name>              Output binary directory(default: IMAGES/rtthread/rtthread)\n'
-    printf '  --bin-name <name>             Output binary name\n'
+    printf '  --images-dir <dir>            Output images directory (default: IMAGES/rtthread)\n'
+    printf '  --image-name <name>           Output image name (default: current command)\n'
     printf '  The other options will be directly passed to the ththread build system. for example:\n'
     printf '     -h, --help                 Print defined help message of ththread build system\n'
     printf '     -c, --clean                clean for specific board\n'
@@ -49,7 +49,7 @@ rtthread_usage() {
     printf '  RTTHREAD_PATCH_DIR            RT-Thread patch directory\n'
     printf '\n'
     printf 'Examples:\n'
-    printf '  scripts/rtthread.sh phytiumpi --bin-name rt.bin\n'
+    printf '  scripts/rtthread.sh phytiumpi --image-name rt.bin\n'
     printf '  scripts/rtthread.sh roc-rk3568-pc -c\n'
 }
 
@@ -68,12 +68,12 @@ rtthread_parse_args() {
                 RTTHREAD_PATCH_DIR="$2"
                 shift 2
                 ;;
-            --bin-dir)
-                RTTHREAD_BIN_DIR="$2"
+            --images-dir)
+                RTTHREAD_IMAGES_DIR="$2"
                 shift 2
                 ;;
-            --bin-name)
-                RTTHREAD_BIN_NAME="$2"
+            --image-name)
+                RTTHREAD_IMAGE_NAME="$2"
                 shift 2
                 ;;
             *)
@@ -94,12 +94,12 @@ rtthread_build() {
     fi
 
     if [[ "${RTTHREAD_ARGS}" != *"-c"* ]]; then
-        info "Copying build artifacts: $RTTHREAD_PLATFORM_DIR/rtthread_a64.bin -> $RTTHREAD_BIN_DIR/$RTTHREAD_BIN_NAME"
-        mkdir -p "${RTTHREAD_BIN_DIR}"
-        cp "${RTTHREAD_PLATFORM_DIR}/$RTTHREAD_PLATFORM_BIN_NAME" "${RTTHREAD_BIN_DIR}/$RTTHREAD_BIN_NAME"
+        info "Copying build artifacts: $RTTHREAD_PLATFORM_DIR/rtthread_a64.bin -> $RTTHREAD_IMAGES_DIR/$RTTHREAD_IMAGE_NAME"
+        mkdir -p "${RTTHREAD_IMAGES_DIR}"
+        cp "${RTTHREAD_PLATFORM_DIR}/$RTTHREAD_PLATFORM_BIN_NAME" "${RTTHREAD_IMAGES_DIR}/$RTTHREAD_IMAGE_NAME"
     else
-        info "Cleaning build artifacts in $RTTHREAD_BIN_DIR"
-        rm -rf "${RTTHREAD_BIN_DIR}" || true
+        info "Cleaning build artifacts in $RTTHREAD_IMAGES_DIR"
+        rm -rf "${RTTHREAD_IMAGES_DIR}" || true
     fi
 }
 
@@ -155,6 +155,14 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     # Parse the other arguments
     rtthread_parse_args "$@"
+
+    if [[ -z "${RTTHREAD_IMAGE_NAME}" ]]; then
+        case "$cmd" in
+            phytiumpi|roc-rk3568-pc)
+                RTTHREAD_IMAGE_NAME="$cmd"
+                ;;
+        esac
+    fi
 
     # Call the main function
     rtthread

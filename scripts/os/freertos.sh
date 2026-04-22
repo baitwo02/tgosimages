@@ -43,6 +43,7 @@ usage() {
     printf '\n'
     printf 'Options:\n'
     printf '  --images-dir <dir>                Output images directory override for qemu-aarch64\n'
+    printf '  --image-name <name>               Output image name (default: current command)\n'
     printf '\n'
     printf 'Environment Variables:\n'
     printf '  FREERTOS_CROSS_COMPILE             Cross compiler prefix (default: aarch64-linux-gnu-)\n'
@@ -400,10 +401,15 @@ build_cmake() {
     success "Image saved: ${images_dir}/${out_name}"
 }
 
-# ── QEMU ─────────────────────────────────────────────────────────────────────
+parse_image_args() {
+    local default_images_dir="$1"
+    local default_image_name="$2"
+    local images_dir_ref="$3"
+    local image_name_ref="$4"
+    shift 4
 
-qemu_aarch64() {
-    local images_dir="${ROOT_DIR}/IMAGES/qemu-aarch64/freertos"
+    local images_dir="${default_images_dir}"
+    local image_name="${default_image_name}"
     local args=()
 
     while [[ $# -gt 0 ]]; do
@@ -413,12 +419,30 @@ qemu_aarch64() {
                 images_dir="$2"
                 shift 2
                 ;;
+            --image-name)
+                [[ $# -ge 2 ]] || die "--image-name requires a value"
+                image_name="$2"
+                shift 2
+                ;;
             *)
                 args+=("$1")
                 shift
                 ;;
         esac
     done
+
+    printf -v "${images_dir_ref}" '%s' "${images_dir}"
+    printf -v "${image_name_ref}" '%s' "${image_name}"
+    FREERTOS_PARSED_ARGS=("${args[@]}")
+}
+
+# ── QEMU ─────────────────────────────────────────────────────────────────────
+
+qemu_aarch64() {
+    local images_dir="${ROOT_DIR}/IMAGES/qemu-aarch64/freertos"
+    local image_name="qemu-aarch64"
+    parse_image_args "${images_dir}" "${image_name}" images_dir image_name "$@"
+    local args=("${FREERTOS_PARSED_ARGS[@]}")
 
     if [[ ${#args[@]} -gt 0 && "${args[0]}" == "clean" ]]; then
         info "Cleaning QEMU FreeRTOS build artifacts"
@@ -436,17 +460,22 @@ qemu_aarch64() {
         "freertos_aarch64_qemu" \
         "src/freertos_aarch64_qemu/freertos_aarch64_qemu.cmake" \
         "freertos-aarch64-qemu.bin" \
-        "freertos-qemu" \
+        "${image_name}" \
         "${images_dir}"
 }
 
 # ── Phytium Pi ───────────────────────────────────────────────────────────────
 
 phytiumpi() {
-    if [[ "$#" -gt 0 && "$1" == "clean" ]]; then
+    local images_dir="${ROOT_DIR}/IMAGES/phytiumpi/freertos"
+    local image_name="phytiumpi"
+    parse_image_args "${images_dir}" "${image_name}" images_dir image_name "$@"
+    local args=("${FREERTOS_PARSED_ARGS[@]}")
+
+    if [[ ${#args[@]} -gt 0 && "${args[0]}" == "clean" ]]; then
         info "Cleaning PhytiumPi FreeRTOS build artifacts"
         rm -rf "${FREERTOS_SRC_DIR}/build-freertos_aarch64_guest"
-        rm -rf "${ROOT_DIR}/IMAGES/phytiumpi/freertos"
+        rm -rf "${images_dir}"
         return
     fi
 
@@ -459,17 +488,22 @@ phytiumpi() {
         "freertos_aarch64_guest" \
         "src/freertos_aarch64_guest/freertos_aarch64_guest.cmake" \
         "freertos-aarch64-guest.bin" \
-        "freertos-phytiumpi" \
-        "${ROOT_DIR}/IMAGES/phytiumpi/freertos"
+        "${image_name}" \
+        "${images_dir}"
 }
 
 # ── Orange Pi ────────────────────────────────────────────────────────────────
 
 orangepi-5-plus() {
-    if [[ "$#" -gt 0 && "$1" == "clean" ]]; then
+    local images_dir="${ROOT_DIR}/IMAGES/orangepi/freertos"
+    local image_name="orangepi-5-plus"
+    parse_image_args "${images_dir}" "${image_name}" images_dir image_name "$@"
+    local args=("${FREERTOS_PARSED_ARGS[@]}")
+
+    if [[ ${#args[@]} -gt 0 && "${args[0]}" == "clean" ]]; then
         info "Cleaning OrangePi FreeRTOS build artifacts"
         rm -rf "${FREERTOS_SRC_DIR}/src/freertos_aarch64_orangepi/build"
-        rm -rf "${ROOT_DIR}/IMAGES/orangepi/freertos"
+        rm -rf "${images_dir}"
         return
     fi
 
@@ -494,10 +528,9 @@ orangepi-5-plus() {
         die "Build output not found: $bin_path"
     fi
 
-    local images_dir="${ROOT_DIR}/IMAGES/orangepi/freertos"
     mkdir -p "$images_dir"
-    cp -f "$bin_path" "${images_dir}/freertos-orangepi"
-    success "Image saved: ${images_dir}/freertos-orangepi"
+    cp -f "$bin_path" "${images_dir}/${image_name}"
+    success "Image saved: ${images_dir}/${image_name}"
 }
 
 # ── Self-test ────────────────────────────────────────────────────────────────

@@ -119,16 +119,16 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name roc-rk3568-pc $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name roc-rk3568-pc $@
 }
 
 rtthread() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "roc-rk3568-pc" $@
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "roc-rk3568-pc" $@
     else
         info "Cleaning RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "roc-rk3568-pc" "--patch-dir" "" "-c"
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "roc-rk3568-pc" "--patch-dir" "" "-c"
     fi
 }
 

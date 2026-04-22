@@ -25,7 +25,8 @@ ZEPHYR_BOARD=""
 ZEPHYR_BOARD_ROOT=""
 ZEPHYR_BUILD_SUBDIR=""
 ZEPHYR_IMAGES_DIR=""
-ZEPHYR_BIN_NAME="zephyr.bin"
+ZEPHYR_IMAGE_NAME=""
+ZEPHYR_BIN_NAME=""
 ZEPHYR_ELF_NAME=""
 ZEPHYR_DTB_NAME=""
 ZEPHYR_ARGS=()
@@ -39,7 +40,7 @@ zephyr_usage() {
     printf 'Commands:\n'
     printf '  qemu-aarch64                  Build Zephyr guest for QEMU aarch64\n'
     printf '  phytiumpi                     Build Zephyr guest for PhytiumPi\n'
-    printf '  orangepi-5-plus              Build Zephyr guest for Orange Pi 5 Plus\n'
+    printf '  orangepi-5-plus               Build Zephyr guest for Orange Pi 5 Plus\n'
     printf '  all                           Build all supported Zephyr guest images\n'
     printf '  clean                         Clean all supported Zephyr guest images\n'
     printf '  help, -h, --help              Display this help information\n'
@@ -52,6 +53,7 @@ zephyr_usage() {
     printf '  --python <path>               Python executable for Zephyr build helpers\n'
     printf '  --cross-compile <prefix>      CROSS_COMPILE prefix\n'
     printf '  --images-dir <dir>            Output image directory override\n'
+    printf '  --image-name <name>           Output image base name (default: current command)\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/zephyr.sh qemu-aarch64\n'
@@ -87,6 +89,10 @@ zephyr_parse_args() {
                 ;;
             --images-dir)
                 ZEPHYR_IMAGES_DIR="$2"
+                shift 2
+                ;;
+            --image-name)
+                ZEPHYR_IMAGE_NAME="$2"
                 shift 2
                 ;;
             *)
@@ -254,37 +260,41 @@ zephyr_build() {
 }
 
 configure_platform() {
+    if [[ -z "${ZEPHYR_IMAGE_NAME}" ]]; then
+        ZEPHYR_IMAGE_NAME="${ZEPHYR_PLATFORM}"
+    fi
+
     case "${ZEPHYR_PLATFORM}" in
         qemu-aarch64)
             ZEPHYR_APP="tests/benchmarks/latency_measure"
             ZEPHYR_BOARD="qemu_cortex_a53"
             ZEPHYR_BUILD_SUBDIR="zephyr/qemu-aarch64"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu-aarch64/zephyr}"
-            ZEPHYR_BIN_NAME="zephyr.bin"
-            ZEPHYR_ELF_NAME="zephyr.elf"
             ;;
         phytiumpi)
             ZEPHYR_APP="tests/benchmarks/latency_measure"
             ZEPHYR_BOARD="phytiumpi_axvisor_guest"
             ZEPHYR_BUILD_SUBDIR="zephyr/phytiumpi"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/phytiumpi/zephyr}"
-            ZEPHYR_BIN_NAME="phytiumpi_zephyr.bin"
-            ZEPHYR_ELF_NAME="phytiumpi_zephyr.elf"
-            ZEPHYR_DTB_NAME="phytiumpi.dtb"
             ;;
         orangepi-5-plus)
             ZEPHYR_APP="tests/benchmarks/latency_measure"
             ZEPHYR_BOARD="orangepi_5_plus_rk3588"
             ZEPHYR_BUILD_SUBDIR="zephyr/orangepi-5-plus"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/orangepi/zephyr}"
-            ZEPHYR_BIN_NAME="orangepi_zephyr.bin"
-            ZEPHYR_ELF_NAME="orangepi_zephyr.elf"
-            ZEPHYR_DTB_NAME="orangepi.dtb"
             ;;
         *)
             die "Unknown Zephyr platform: ${ZEPHYR_PLATFORM}"
             ;;
     esac
+
+    ZEPHYR_BIN_NAME="${ZEPHYR_IMAGE_NAME}"
+    ZEPHYR_ELF_NAME="${ZEPHYR_IMAGE_NAME}.elf"
+    if [[ "${ZEPHYR_PLATFORM}" != "qemu-aarch64" ]]; then
+        ZEPHYR_DTB_NAME="${ZEPHYR_IMAGE_NAME}.dtb"
+    else
+        ZEPHYR_DTB_NAME=""
+    fi
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

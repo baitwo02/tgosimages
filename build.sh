@@ -60,7 +60,7 @@ usage() {
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
     printf '%s\n' "  $0 os nimbos aarch64"
-    printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
+    printf '%s\n' "  $0 os arceos aarch64-dyn --image-name arceos.bin"
     printf '%s\n' "  $0 os all <options>"
     printf '%s\n' "  $0 os clean"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"

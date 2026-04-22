@@ -241,8 +241,8 @@ linux() {
             mkdir -p "${LINUX_IMAGES_DIR}"
             KIMG_PATH="${LINUX_SRC_DIR}/${kimg_subpath}"
             [[ -f "${KIMG_PATH}" ]] || die "Kernel image not found: ${KIMG_PATH}"
-            info "Copying image: ${KIMG_PATH} -> ${LINUX_IMAGES_DIR}/qemu-${ARCH}"
-            cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/qemu-${ARCH}"
+            info "Copying image: ${KIMG_PATH} -> ${LINUX_IMAGES_DIR}/linux-qemu"
+            cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/linux-qemu"
             
             package_os_into_rootfs "linux" "${LINUX_IMAGES_DIR}"
         fi
@@ -275,7 +275,7 @@ arceos() {
     info "Building ArceOS using common arceos.sh script for platform: $platform -> $ARCEOS_IMAGES_DIR"
     
     # Call the arceos.sh script with proper parameters
-    bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name "qemu-${ARCH}" "$@"
+    bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "$ARCEOS_IMAGES_DIR" --image-name "arceos-qemu" "$@"
     
     if [[ "$@" != *"clean"* ]]; then
         package_os_into_rootfs "arceos" "${ARCEOS_IMAGES_DIR}"
@@ -289,7 +289,7 @@ nimbos() {
     qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
     nimbos_images_dir="${qemu_images_dir}/nimbos"
 
-    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" --images-dir "${nimbos_images_dir}" "$@"
+    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" --images-dir "${nimbos_images_dir}" --image-name "nimbos-qemu" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
         package_os_into_rootfs "nimbos" "${nimbos_images_dir}"
@@ -307,7 +307,7 @@ zephyr() {
         die "Zephyr guest build is currently only supported for qemu aarch64"
     fi
 
-    bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64 --images-dir "${zephyr_images_dir}" "$@"
+    bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64 --images-dir "${zephyr_images_dir}" --image-name "zephyr-qemu" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
         package_os_into_rootfs "zephyr" "${zephyr_images_dir}"
@@ -326,10 +326,10 @@ freertos() {
     fi
 
     if [[ "$@" != *"clean"* ]]; then
-        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 --images-dir "${freertos_images_dir}"
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 --images-dir "${freertos_images_dir}" --image-name "freertos-qemu"
         package_os_into_rootfs "freertos" "${freertos_images_dir}"
     else
-        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean --images-dir "${freertos_images_dir}"
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean --images-dir "${freertos_images_dir}" --image-name "freertos-qemu"
         rm -rf "${freertos_images_dir}" || true
     fi
 }

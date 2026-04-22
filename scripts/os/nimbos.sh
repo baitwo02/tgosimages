@@ -17,6 +17,7 @@ AXVM_BIOS_X86_SRC_DIR="${AXVM_BIOS_X86_SRC_DIR:-${BUILD_DIR}/axvm-bios-x86}"
 NIMBOS_PLATFORM=""
 NIMBOS_ARGS=""
 NIMBOS_IMAGES_DIR=""
+NIMBOS_IMAGE_NAME=""
 
 nimbos_usage() {
     printf 'NimbOS build script for various platforms\n'
@@ -38,6 +39,7 @@ nimbos_usage() {
     printf '  --bios-repo-url <url>             AXVM BIOS repository URL (default: https://github.com/arceos-hypervisor/axvm-bios-x86.git)\n'
     printf '  --bios-src-dir <dir>              AXVM BIOS source directory (default: build/axvm-bios-x86)\n'
     printf '  --images-dir <dir>                Output images directory (default: IMAGES/nimbos/<arch>/nimbos)\n'
+    printf '  --image-name <name>               Output image name (default: current command)\n'
     printf '  The other options will be directly passed to the make build system. for example:\n'
     printf '     clean                          Clean for specific platform\n'
     printf '\n'
@@ -73,6 +75,10 @@ nimbos_parse_args() {
                 ;;
             --images-dir)
                 NIMBOS_IMAGES_DIR="$2"
+                shift 2
+                ;;
+            --image-name)
+                NIMBOS_IMAGE_NAME="$2"
                 shift 2
                 ;;
             *)
@@ -183,16 +189,16 @@ build_nimbos() {
 
     # Copy the standard build binary
     local binary_path="$NIMBOS_SRC_DIR/kernel/target/${NIMBOS_PLATFORM}/release/nimbos.bin"
-    info "Copying: $binary_path -> $NIMBOS_IMAGES_DIR/qemu-${NIMBOS_PLATFORM}"
-    cp -f "$binary_path" "$NIMBOS_IMAGES_DIR/qemu-${NIMBOS_PLATFORM}"
+    info "Copying: $binary_path -> $NIMBOS_IMAGES_DIR/${NIMBOS_IMAGE_NAME}"
+    cp -f "$binary_path" "$NIMBOS_IMAGES_DIR/${NIMBOS_IMAGE_NAME}"
 
     # Build kernel for usertests
     info "Building kernel for usertests: make -C kernel build ARCH=${NIMBOS_PLATFORM} USER_ENTRY=usertests"
     make -C kernel build ARCH="${NIMBOS_PLATFORM}" USER_ENTRY=usertests ${NIMBOS_ARGS}
 
     local binary_path="$NIMBOS_SRC_DIR/kernel/target/${NIMBOS_PLATFORM}/release/nimbos.bin"
-    info "Copying: $binary_path -> $NIMBOS_IMAGES_DIR/qemu-${NIMBOS_PLATFORM}"
-    cp -f "$binary_path" "$NIMBOS_IMAGES_DIR/qemu-${NIMBOS_PLATFORM}_usertests"
+    info "Copying: $binary_path -> $NIMBOS_IMAGES_DIR/${NIMBOS_IMAGE_NAME}-usertests"
+    cp -f "$binary_path" "$NIMBOS_IMAGES_DIR/${NIMBOS_IMAGE_NAME}-usertests"
 
     popd >/dev/null
 
@@ -232,8 +238,8 @@ build_axvm_bios_x86() {
 }
 
 create_nimbos_disk_image() {
-    local disk_image_path="${NIMBOS_IMAGES_DIR}/rootfs.img"
-    local nimbos_binary="${NIMBOS_IMAGES_DIR}/qemu-${NIMBOS_PLATFORM}_usertests"
+    local disk_image_path="${NIMBOS_IMAGES_DIR}/${NIMBOS_IMAGE_NAME}.img"
+    local nimbos_binary="${NIMBOS_IMAGES_DIR}/${NIMBOS_IMAGE_NAME}-usertests"
     local mount_point="${BUILD_DIR}/nimbos_mount_${NIMBOS_PLATFORM}"
     
     # Check if nimbos binary exists
@@ -261,7 +267,7 @@ create_nimbos_disk_image() {
     sudo mount -o loop "$disk_image_path" "$mount_point"
     
     # Copy NimbOS binary
-    sudo cp "$nimbos_binary" "$mount_point/nimbos-${NIMBOS_PLATFORM}.bin"
+    sudo cp "$nimbos_binary" "$mount_point/${NIMBOS_IMAGE_NAME}.bin"
     
     # Copy BIOS for x86_64
     if [ "${NIMBOS_PLATFORM}" == "x86_64" ] && [ -f "$AXVM_BIOS_X86_SRC_DIR/out/axvm-bios.bin" ]; then
@@ -329,6 +335,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     # Parse the other arguments
     nimbos_parse_args "$@"
+
+    if [[ -z "${NIMBOS_IMAGE_NAME}" ]]; then
+        NIMBOS_IMAGE_NAME="${NIMBOS_PLATFORM}"
+    fi
 
     # Call the main function
     nimbos

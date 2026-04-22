@@ -15,8 +15,8 @@ ARCEOS_PATCH_DIR="${ARCEOS_PATCH_DIR:-${ROOT_DIR}/patches/arceos}"
 
 # Global variables for parsed arguments
 ARCEOS_PLATFORM=""
-ARCEOS_BIN_DIR="IMAGES/arceos"
-ARCEOS_BIN_NAME=""
+ARCEOS_IMAGES_DIR="IMAGES/arceos"
+ARCEOS_IMAGE_NAME=""
 ARCEOS_ARGS=""
 
 # Platform-specific configurations
@@ -66,8 +66,8 @@ arceos_usage() {
     printf '  --repo-url <url>              ArceOS repository URL (default: https://github.com/arceos-hypervisor/arceos.git)\n'
     printf '  --src-dir <dir>               Source directory (default: build/arceos)\n'
     printf '  --patch-dir <dir>             Patch directory (default: patches/arceos)\n'
-    printf '  --bin-dir <name>              Output binary directory (default: IMAGES/arceos)\n'
-    printf '  --bin-name <name>             Output binary name\n'
+    printf '  --images-dir <dir>            Output images directory (default: IMAGES/arceos)\n'
+    printf '  --image-name <name>           Output image name (default: current command)\n'
     printf '  The other options will be directly passed to the make build system. for example:\n'
     printf '     clean                      Clean for specific platform\n'
     printf '\n'
@@ -77,7 +77,7 @@ arceos_usage() {
     printf '  ARCEOS_PATCH_DIR              ArceOS patch directory\n'
     printf '\n'
     printf 'Examples:\n'
-    printf '  scripts/arceos.sh aarch64-dyn --bin-name arceos.bin\n'
+    printf '  scripts/arceos.sh aarch64-dyn --image-name arceos.bin\n'
     printf '  scripts/arceos.sh riscv64-qemu-virt clean\n'
 }
 
@@ -96,12 +96,12 @@ arceos_parse_args() {
                 ARCEOS_PATCH_DIR="$2"
                 shift 2
                 ;;
-            --bin-dir)
-                ARCEOS_BIN_DIR="$2"
+            --images-dir)
+                ARCEOS_IMAGES_DIR="$2"
                 shift 2
                 ;;
-            --bin-name)
-                ARCEOS_BIN_NAME="$2"
+            --image-name)
+                ARCEOS_IMAGE_NAME="$2"
                 shift 2
                 ;;
             *)
@@ -139,17 +139,12 @@ arceos_build() {
     fi
 
     if [[ "${ARCEOS_ARGS}" != *"clean"* ]]; then
-        # Set default bin name if not specified
-        if [[ -z "$ARCEOS_BIN_NAME" ]]; then
-            ARCEOS_BIN_NAME="$ARCEOS_PLATFORM"
-        fi
-        
-        info "Copying build artifacts: $ARCEOS_SRC_DIR/examples/helloworld-myplat/helloworld-myplat_$app_features.bin -> $ARCEOS_BIN_DIR/$ARCEOS_BIN_NAME"
-        mkdir -p "${ARCEOS_BIN_DIR}"
-        cp "$ARCEOS_SRC_DIR/examples/helloworld-myplat/helloworld-myplat_$app_features.bin" "${ARCEOS_BIN_DIR}/$ARCEOS_BIN_NAME"
+        info "Copying build artifacts: $ARCEOS_SRC_DIR/examples/helloworld-myplat/helloworld-myplat_$app_features.bin -> $ARCEOS_IMAGES_DIR/$ARCEOS_IMAGE_NAME"
+        mkdir -p "${ARCEOS_IMAGES_DIR}"
+        cp "$ARCEOS_SRC_DIR/examples/helloworld-myplat/helloworld-myplat_$app_features.bin" "${ARCEOS_IMAGES_DIR}/$ARCEOS_IMAGE_NAME"
     else
-        info "Cleaning build artifacts in $ARCEOS_BIN_DIR"
-        rm -rf "${ARCEOS_BIN_DIR}" || true
+        info "Cleaning build artifacts in $ARCEOS_IMAGES_DIR"
+        rm -rf "${ARCEOS_IMAGES_DIR}" || true
     fi
 }
 
@@ -203,6 +198,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 
     # Parse the other arguments
     arceos_parse_args "$@"
+
+    if [[ -z "${ARCEOS_IMAGE_NAME}" ]]; then
+        ARCEOS_IMAGE_NAME="${ARCEOS_PLATFORM}"
+    fi
 
     # Call the main function
     arceos

@@ -80,7 +80,7 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name tac-e400-plc $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name tac-e400-plc $@
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

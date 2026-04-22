@@ -92,16 +92,16 @@ arceos() {
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --bin-dir "$ARCEOS_IMAGES_DIR" --bin-name phytiumpi $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name phytiumpi $@
 }
 
 rtthread() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" $@
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "phytiumpi" $@
     else
         info "Cleaning RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--bin-dir" "$RTTHREAD_IMAGES_DIR" "--bin-name" "phytiumpi" "-c"
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "phytiumpi" "-c"
     fi
 }
 
