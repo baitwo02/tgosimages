@@ -23,18 +23,18 @@ pack_usage() {
     printf '  --in_dir, --input_dir, -i <dir>   Directory containing images (default: IMAGES)\n'
     printf '  --out_dir, --output_dir, -o <dir> Output directory for packaged archives (default: release)\n'
     printf '  --mode <directory|file>           Packaging mode (default: directory)\n'
-    printf '  --per-file                        Package each file into its own archive\n'
+    printf '  --per-file                        Package each direct child of <dir> into its own archive\n'
     printf '  help, -h, --help                  Display this help information\n'
     printf '\n'
     printf 'Notes:\n'
-    printf '  * directory mode packages non-empty image directories into .tar.gz files.\n'
-    printf '  * file mode packages each file into an individual .tar.gz archive.\n'
-    printf '  * QEMU artifacts are discovered from IMAGES/qemu/<arch>/<system>/.\n'
+    printf '  * directory mode packages all direct children of <dir> into one .tar.gz archive.\n'
+    printf '  * file mode packages each direct child of <dir> into an individual .tar.gz archive.\n'
+    printf '  * Direct children can be either files or directories.\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/tools/pack.sh\n'
     printf '  scripts/tools/pack.sh --in_dir IMAGES --out_dir release\n'
-    printf '  scripts/tools/pack.sh --mode file --in_dir IMAGES --out_dir release\n'
+    printf '  scripts/tools/pack.sh --per-file --in_dir IMAGES --out_dir release\n'
 }
 
 pack_parse_args() {
@@ -91,14 +91,6 @@ pack_path() {
     fi
 }
 
-pack_directory() {
-    pack_path "$1" "$2"
-}
-
-pack_file() {
-    pack_path "$1" "$2"
-}
-
 is_valid_pack_mode() {
     case "$1" in
         directory|file)
@@ -110,103 +102,49 @@ is_valid_pack_mode() {
     esac
 }
 
-pack_files_in_directory() {
+pack_child_paths() {
     local source_dir="$1"
-    local rel_prefix="$2"
-    local count_packed_ref="$3"
-    local count_skipped_ref="$4"
-    local packaged_any_ref="$5"
-    local file_path
-    local rel_file
-    local package_stem
-    local packed_any_dir=0
+    local child_path
 
-    shopt -s nullglob
-    for file_path in "${source_dir}"/*; do
-        [[ -f "${file_path}" ]] || continue
-        if [[ -n "${rel_prefix}" ]]; then
-            rel_file="${rel_prefix}/$(basename "${file_path}")"
-        else
-            rel_file="$(basename "${file_path}")"
-        fi
-        package_stem="${rel_file//\//_}"
-        pack_file "${file_path}" "${package_stem}"
-        printf -v "${count_packed_ref}" '%d' "$(( ${!count_packed_ref} + 1 ))"
-        printf -v "${packaged_any_ref}" '%d' 1
-        packed_any_dir=1
+    shopt -s nullglob dotglob
+    for child_path in "${source_dir}"/*; do
+        [[ -e "${child_path}" ]] || continue
+        printf '%s\n' "${child_path}"
     done
-    shopt -u nullglob
-
-    if [[ ${packed_any_dir} -eq 0 ]]; then
-        warn "Skipping directory without files ${rel_prefix}"
-        printf -v "${count_skipped_ref}" '%d' "$(( ${!count_skipped_ref} + 1 ))"
-    fi
+    shopt -u nullglob dotglob
 }
 
 pack_images() {
     local count_packed=0
     local count_skipped=0
-    local top
-    local mid
-    local leaf
-    local rel_path
-    local packaged_any=0
+    local input_basename
+    local child_path
+    local package_stem
+    local child_count=0
 
     mkdir -p "${RELEASE_DIR}"
-    cd "${IMAGES_DIR}"
+    input_basename="$(basename "${IMAGES_DIR}")"
 
-    for top in *; do
-        [[ -d "${top}" ]] || continue
-        if [[ "${top}" == "qemu" ]]; then
-            for mid in "${top}"/*; do
-                [[ -d "${mid}" ]] || continue
-                for leaf in "${mid}"/*; do
-                    [[ -d "${leaf}" ]] || continue
-                    rel_path="${leaf#${IMAGES_DIR}/}"
-                    if [[ "${PACK_MODE}" == "file" ]]; then
-                        pack_files_in_directory "${leaf}" "${rel_path}" count_packed count_skipped packaged_any
-                    elif find "${leaf}" -mindepth 1 | read; then
-                        pack_directory "${leaf}" "${rel_path//\//_}"
-                        count_packed=$((count_packed + 1))
-                        packaged_any=1
-                    else
-                        warn "Skipping empty directory ${rel_path}"
-                        count_skipped=$((count_skipped + 1))
-                    fi
-                done
-            done
-        else
-            for leaf in "${top}"/*; do
-                [[ -d "${leaf}" ]] || continue
-                rel_path="${leaf#${IMAGES_DIR}/}"
-                if [[ "${PACK_MODE}" == "file" ]]; then
-                    pack_files_in_directory "${leaf}" "${rel_path}" count_packed count_skipped packaged_any
-                elif find "${leaf}" -mindepth 1 | read; then
-                    pack_directory "${leaf}" "${rel_path//\//_}"
-                    count_packed=$((count_packed + 1))
-                    packaged_any=1
-                else
-                    warn "Skipping empty directory ${rel_path}"
-                    count_skipped=$((count_skipped + 1))
-                fi
-            done
-        fi
-    done
-
-    if [[ ${packaged_any} -eq 0 ]]; then
+    while IFS= read -r child_path; do
+        [[ -n "${child_path}" ]] || continue
+        child_count=$((child_count + 1))
         if [[ "${PACK_MODE}" == "file" ]]; then
-            pack_files_in_directory "${IMAGES_DIR}" "" count_packed count_skipped packaged_any
-        elif find . -mindepth 1 -maxdepth 1 | read; then
-            pack_directory "${IMAGES_DIR}" "$(basename "${IMAGES_DIR}")"
+            package_stem="$(basename "${child_path}")"
+            pack_path "${child_path}" "${package_stem}"
             count_packed=$((count_packed + 1))
-        else
-            warn "Skipping empty directory $(basename "${IMAGES_DIR}")"
-            count_skipped=$((count_skipped + 1))
         fi
+    done < <(pack_child_paths "${IMAGES_DIR}")
+
+    if [[ ${child_count} -eq 0 ]]; then
+        warn "Skipping empty directory ${IMAGES_DIR}"
+        count_skipped=$((count_skipped + 1))
+    elif [[ "${PACK_MODE}" == "directory" ]]; then
+        info "Packing contents of ${IMAGES_DIR} -> ${RELEASE_DIR}/${input_basename}.tar.gz"
+        tar -czf "${RELEASE_DIR}/${input_basename}.tar.gz" -C "${IMAGES_DIR}" .
+        count_packed=$((count_packed + 1))
     fi
 
     success "Packaging completed: ${count_packed} archives created, skipped ${count_skipped} empty directories"
-    cd - >/dev/null
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
