@@ -27,7 +27,7 @@ usage() {
     printf '%s\n' "  qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
     printf '%s\n' "  qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
     printf '%s\n' "  qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
-    printf '%s\n' "  qemu                 -> build qemu-aarch64, qemu-x86_64, qemu-riscv64 sequentially with rootfs and all os if applicable"
+    printf '%s\n' "  qemu                 -> scripts/platform/qemu.sh all"
     printf '%s\n' "  all                  -> build all platform targets sequentially with rootfs and all os if applicable"
     printf '%s\n' "  clean                -> clean all platform targets"
     printf '%s\n' ""
@@ -54,9 +54,9 @@ usage() {
     printf '%s\n' "Examples:"
     printf '%s\n' "  $0 platform phytiumpi             # show phytiumpi help"
     printf '%s\n' "  $0 platform phytiumpi linux"
-    printf '%s\n' "  $0 platform qemu                 # build all qemu architectures with rootfs"
+    printf '%s\n' "  $0 platform qemu                 # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64          # show qemu help"
-    printf '%s\n' "  $0 platform qemu-aarch64 linux"
+    printf '%s\n' "  $0 platform qemu-aarch64 linux    # build linux with default rootfs"
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
     printf '%s\n' "  $0 os nimbos aarch64"
@@ -100,41 +100,31 @@ run_platform_target() {
             fi
             run_checked_script "$script_path" "$@"
             ;;
-        qemu-aarch64|qemu-x86_64|qemu-riscv64)
-            local arch="${target#qemu-}"
+        qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
+            local qemu_cmd
             local script_path="${PLATFORM_DIR}/qemu.sh"
-            if [[ $# -eq 0 ]]; then
-                run_checked_script "$script_path" "$arch"
+            if [[ "$target" == "qemu" ]]; then
+                qemu_cmd="all"
+            else
+                qemu_cmd="${target#qemu-}"
             fi
-            run_checked_script "$script_path" "$arch" "$@"
-            ;;
-        qemu)
-            local qemu_arches=(aarch64 x86_64 riscv64)
-            local extra_args=("$@")
-
-            for arch in "${qemu_arches[@]}"; do
-                if [[ ${#extra_args[@]} -eq 0 ]]; then
-                    echo "Building: qemu-${arch} all --rootfs busybox,alpine,debian"
-                    "$0" platform "qemu-${arch}" all --rootfs busybox,alpine,debian || {
-                        echo "[ERROR] qemu-${arch} build failed" >&2
-                        exit 1
-                    }
-                else
-                    echo "Building: qemu-${arch} ${extra_args[*]}"
-                    "$0" platform "qemu-${arch}" "${extra_args[@]}" || {
-                        echo "[ERROR] qemu-${arch} build failed" >&2
-                        exit 1
-                    }
-                fi
-            done
+            if [[ $# -eq 0 ]]; then
+                run_checked_script "$script_path"
+            fi
+            case "${1:-}" in
+                help|-h|--help)
+                    run_checked_script "$script_path"
+                    ;;
+            esac
+            run_checked_script "$script_path" "$qemu_cmd" "$@"
             ;;
         all)
             local extra_args=("$@")
             for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 if [[ ${#extra_args[@]} -eq 0 ]]; then
                     if [[ "$p" == qemu-* ]]; then
-                        echo "Building: $p all --rootfs busybox,alpine,debian"
-                        "$0" platform "$p" all --rootfs busybox,alpine,debian || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                        echo "Building: $p all"
+                        "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
                     else
                         echo "Building: $p all"
                         "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
