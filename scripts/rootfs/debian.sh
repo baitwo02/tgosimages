@@ -20,6 +20,8 @@ DEBIAN_DEFAULT_PACKAGES=(
     gcc
     musl-dev
     libusb-1.0-0-dev
+    git
+    vim
 )
 
 DEBIAN_DOCKER_IMAGE=""

@@ -21,6 +21,8 @@ ALPINE_DEFAULT_PACKAGES=(
     gcc
     musl-dev
     libusb-dev
+    git
+    vim
 )
 
 # Global variables for parsed arguments
