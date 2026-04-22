@@ -264,24 +264,16 @@ arceos() {
 nimbos() {
     local qemu_images_dir
     local nimbos_images_dir
-    local legacy_nimbos_images_dir
 
     qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
     nimbos_images_dir="${qemu_images_dir}/nimbos"
-    legacy_nimbos_images_dir="${ROOT_DIR}/IMAGES/qemu/${ARCH}/nimbos"
 
-    # Call the nimbos.sh script with proper parameters
-    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" "--images-dir" "${ROOT_DIR}/IMAGES/qemu" "$@"
+    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" --images-dir "${nimbos_images_dir}" "$@"
 
     if [[ "$@" != *"clean"* ]]; then
-        if [[ -d "${legacy_nimbos_images_dir}" ]]; then
-            mkdir -p "${qemu_images_dir}"
-            rm -rf "${nimbos_images_dir}"
-            mv "${legacy_nimbos_images_dir}" "${nimbos_images_dir}"
-        fi
         package_os_into_rootfs "nimbos" "${nimbos_images_dir}"
     else
-        rm -rf "${legacy_nimbos_images_dir}" "${nimbos_images_dir}" || true
+        rm -rf "${nimbos_images_dir}" || true
     fi
 }
 
@@ -313,16 +305,10 @@ freertos() {
     fi
 
     if [[ "$@" != *"clean"* ]]; then
-        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64
-        if [[ -d "${ROOT_DIR}/IMAGES/qemu/freertos" ]]; then
-            mkdir -p "${qemu_images_dir}"
-            rm -rf "${freertos_images_dir}"
-            mv "${ROOT_DIR}/IMAGES/qemu/freertos" "${freertos_images_dir}"
-        fi
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 --images-dir "${freertos_images_dir}"
         package_os_into_rootfs "freertos" "${freertos_images_dir}"
     else
-        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean
-        rm -rf "${ROOT_DIR}/IMAGES/qemu/freertos" || true
+        bash "${SCRIPT_DIR}/../os/freertos.sh" qemu-aarch64 clean --images-dir "${freertos_images_dir}"
         rm -rf "${freertos_images_dir}" || true
     fi
 }

@@ -16,7 +16,7 @@ AXVM_BIOS_X86_SRC_DIR="${AXVM_BIOS_X86_SRC_DIR:-${BUILD_DIR}/axvm-bios-x86}"
 # Global variables for parsed arguments
 NIMBOS_PLATFORM=""
 NIMBOS_ARGS=""
-NIMBOS_IMAGES_DIR="$ROOT_DIR/IMAGES/nimbos"
+NIMBOS_IMAGES_DIR=""
 
 nimbos_usage() {
     printf 'NimbOS build script for various platforms\n'
@@ -37,7 +37,7 @@ nimbos_usage() {
     printf '  --src-dir <dir>                   Source directory (default: build/nimbos)\n'
     printf '  --bios-repo-url <url>             AXVM BIOS repository URL (default: https://github.com/arceos-hypervisor/axvm-bios-x86.git)\n'
     printf '  --bios-src-dir <dir>              AXVM BIOS source directory (default: build/axvm-bios-x86)\n'
-    printf '  --images-dir <dir>                Output images directory (default: IMAGES/nimbos)\n'
+    printf '  --images-dir <dir>                Output images directory (default: IMAGES/nimbos/<arch>/nimbos)\n'
     printf '  The other options will be directly passed to the make build system. for example:\n'
     printf '     clean                          Clean for specific platform\n'
     printf '\n'
@@ -84,6 +84,10 @@ nimbos_parse_args() {
 }
 
 build_nimbos() {
+    if [[ -z "$NIMBOS_IMAGES_DIR" ]]; then
+        NIMBOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/nimbos/${NIMBOS_PLATFORM}/nimbos"
+    fi
+
     # Check if clean command
     if [[ "$NIMBOS_ARGS" == *"clean"* ]]; then
         if [[ -d "$NIMBOS_SRC_DIR" ]]; then
@@ -110,7 +114,6 @@ build_nimbos() {
         return 0
     fi
 
-    NIMBOS_IMAGES_DIR="${NIMBOS_IMAGES_DIR}/${NIMBOS_PLATFORM}/nimbos"
     mkdir -p "$NIMBOS_IMAGES_DIR"
 
     # Build axvm-bios-x86 for x86_64 architecture

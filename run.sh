@@ -3,8 +3,6 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
 ROOT_DIR=$(cd "${SCRIPT_DIR}" && pwd -P)
-IMAGES_DIR="${ROOT_DIR}/IMAGES/qemu/linux"
-
 usage() {
     printf '%s\n' "run.sh: QEMU boot helper for aarch64, riscv64, x86_64."
     printf '%s\n' ''
@@ -29,10 +27,11 @@ usage() {
 
 run_qemu_aarch64() {
     local fs_type="${1:-ramfs}"
-    local KERNEL="${IMAGES_DIR}/aarch64/Image"
+    local images_dir="${ROOT_DIR}/IMAGES/qemu-aarch64/linux"
+    local KERNEL="${images_dir}/Image"
     echo $KERNEL
     if [[ "$fs_type" == "ramfs" ]]; then
-        local INITRAMFS="${IMAGES_DIR}/aarch64/initramfs.cpio.gz"
+        local INITRAMFS="${images_dir}/initramfs.cpio.gz"
         if [[ ! -f "$KERNEL" || ! -f "$INITRAMFS" ]]; then
             echo "[ERROR] Missing kernel or initramfs for aarch64." >&2
             exit 1
@@ -47,7 +46,7 @@ run_qemu_aarch64() {
             -append "root=/dev/ram rw console=ttyAMA0 init=/init" \
             -no-reboot
     elif [[ "$fs_type" == "rootfs" ]]; then
-        local ROOTFS="${IMAGES_DIR}/aarch64/rootfs.img"
+        local ROOTFS="${images_dir}/rootfs.img"
         if [[ ! -f "$KERNEL" || ! -f "$ROOTFS" ]]; then
             echo "[ERROR] Missing kernel or rootfs for aarch64." >&2
             exit 1
@@ -69,9 +68,10 @@ run_qemu_aarch64() {
 
 run_qemu_riscv64() {
     local fs_type="${1:-ramfs}"
-    local KERNEL="${IMAGES_DIR}/riscv64/Image"
+    local images_dir="${ROOT_DIR}/IMAGES/qemu-riscv64/linux"
+    local KERNEL="${images_dir}/Image"
     if [[ "$fs_type" == "ramfs" ]]; then
-        local INITRAMFS="${IMAGES_DIR}/riscv64/initramfs.cpio.gz"
+        local INITRAMFS="${images_dir}/initramfs.cpio.gz"
         if [[ ! -f "$KERNEL" || ! -f "$INITRAMFS" ]]; then
             echo "[ERROR] Missing kernel or initramfs for riscv64." >&2
             exit 1
@@ -85,7 +85,7 @@ run_qemu_riscv64() {
             -append "root=/dev/ram rw console=ttyS0 init=/init" \
             -no-reboot
     elif [[ "$fs_type" == "rootfs" ]]; then
-        local ROOTFS="${IMAGES_DIR}/riscv64/rootfs.img"
+        local ROOTFS="${images_dir}/rootfs.img"
         if [[ ! -f "$KERNEL" || ! -f "$ROOTFS" ]]; then
             echo "[ERROR] Missing kernel or rootfs for riscv64." >&2
             exit 1
@@ -106,9 +106,10 @@ run_qemu_riscv64() {
 
 run_qemu_x86_64() {
     local fs_type="${1:-ramfs}"
-    local KERNEL="${IMAGES_DIR}/x86_64/bzImage"
+    local images_dir="${ROOT_DIR}/IMAGES/qemu-x86_64/linux"
+    local KERNEL="${images_dir}/bzImage"
     if [[ "$fs_type" == "ramfs" ]]; then
-        local INITRAMFS="${IMAGES_DIR}/x86_64/initramfs.cpio.gz"
+        local INITRAMFS="${images_dir}/initramfs.cpio.gz"
         if [[ ! -f "$KERNEL" || ! -f "$INITRAMFS" ]]; then
             echo "[ERROR] Missing kernel or initramfs for x86_64." >&2
             exit 1
@@ -122,7 +123,7 @@ run_qemu_x86_64() {
             -append "root=/dev/ram rw console=ttyS0 init=/init" \
             -no-reboot
     elif [[ "$fs_type" == "rootfs" ]]; then
-        local ROOTFS="${IMAGES_DIR}/x86_64/rootfs.img"
+        local ROOTFS="${images_dir}/rootfs.img"
         if [[ ! -f "$KERNEL" || ! -f "$ROOTFS" ]]; then
             echo "[ERROR] Missing kernel or rootfs for x86_64." >&2
             exit 1

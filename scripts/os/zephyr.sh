@@ -259,7 +259,7 @@ configure_platform() {
             ZEPHYR_APP="tests/benchmarks/latency_measure"
             ZEPHYR_BOARD="qemu_cortex_a53"
             ZEPHYR_BUILD_SUBDIR="zephyr/qemu-aarch64"
-            : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu/aarch64/zephyr}"
+            : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu-aarch64/zephyr}"
             ZEPHYR_BIN_NAME="zephyr.bin"
             ZEPHYR_ELF_NAME="zephyr.elf"
             ;;

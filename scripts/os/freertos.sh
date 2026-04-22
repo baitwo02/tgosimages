@@ -41,6 +41,9 @@ usage() {
     printf '  test                               Run self-test for fix_cmake_paths
   clean                              Clean build output artifacts\n'
     printf '\n'
+    printf 'Options:\n'
+    printf '  --images-dir <dir>                Output images directory override for qemu-aarch64\n'
+    printf '\n'
     printf 'Environment Variables:\n'
     printf '  FREERTOS_CROSS_COMPILE             Cross compiler prefix (default: aarch64-linux-gnu-)\n'
     printf '\n'
@@ -363,7 +366,7 @@ build_cmake() {
     local cmake_file="$2"     # e.g. src/freertos_aarch64_qemu/freertos_aarch64_qemu.cmake
     local bin_name="$3"       # e.g. freertos-aarch64-qemu.bin
     local out_name="$4"       # e.g. freertos-qemu
-    local images_dir="$5"     # e.g. IMAGES/qemu/freertos
+    local images_dir="$5"     # e.g. IMAGES/qemu-aarch64/freertos
 
     # Fix hardcoded paths in the platform cmake file
     info "Fixing cmake paths: $cmake_file"
@@ -400,10 +403,27 @@ build_cmake() {
 # ── QEMU ─────────────────────────────────────────────────────────────────────
 
 qemu_aarch64() {
-    if [[ "$#" -gt 0 && "$1" == "clean" ]]; then
+    local images_dir="${ROOT_DIR}/IMAGES/qemu-aarch64/freertos"
+    local args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --images-dir)
+                [[ $# -ge 2 ]] || die "--images-dir requires a value"
+                images_dir="$2"
+                shift 2
+                ;;
+            *)
+                args+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    if [[ ${#args[@]} -gt 0 && "${args[0]}" == "clean" ]]; then
         info "Cleaning QEMU FreeRTOS build artifacts"
         rm -rf "${FREERTOS_SRC_DIR}/build-freertos_aarch64_qemu"
-        rm -rf "${ROOT_DIR}/IMAGES/qemu/freertos"
+        rm -rf "${images_dir}"
         return
     fi
 
@@ -417,7 +437,7 @@ qemu_aarch64() {
         "src/freertos_aarch64_qemu/freertos_aarch64_qemu.cmake" \
         "freertos-aarch64-qemu.bin" \
         "freertos-qemu" \
-        "${ROOT_DIR}/IMAGES/qemu/freertos"
+        "${images_dir}"
 }
 
 # ── Phytium Pi ───────────────────────────────────────────────────────────────
