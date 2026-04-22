@@ -103,19 +103,17 @@ run_platform_target() {
         qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
             local qemu_cmd
             local script_path="${PLATFORM_DIR}/qemu.sh"
+            local qemu_arch=""
             if [[ "$target" == "qemu" ]]; then
                 qemu_cmd="all"
             else
                 qemu_cmd="${target#qemu-}"
             fi
+            qemu_arch="${qemu_cmd}"
+            export QEMU_ARCH="${qemu_arch}"
             if [[ $# -eq 0 ]]; then
                 run_checked_script "$script_path"
             fi
-            case "${1:-}" in
-                help|-h|--help)
-                    run_checked_script "$script_path"
-                    ;;
-            esac
             run_checked_script "$script_path" "$qemu_cmd" "$@"
             ;;
         all)

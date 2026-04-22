@@ -20,18 +20,28 @@ ROOTFS_STAGE_DIR=""
 
 # Display help information
 usage() {
+    local usage_arch="${QEMU_ARCH:-}"
+
     printf 'Build supported OS for QEMU\n'
     printf '\n'
     printf 'Usage:\n'
-    printf '  scripts/qemu.sh <command> <os> [options]\n'
-    printf '\n'
-    printf 'Commands:\n'
-    printf '  aarch64                           Build all OS targets for AArch64 architecture\n'
-    printf '  x86_64                            Build all OS targets for x86_64 architecture\n'
-    printf '  riscv64                           Build all OS targets for RISC-V architecture\n'
-    printf '  all                               Build all supported architectures and OS targets\n'
-    printf '  help, -h, --help                  Display this help information\n'
-    printf '  clean                             Clean build output artifacts\n'
+    if [[ -n "${usage_arch}" ]]; then
+        if [[ "${usage_arch}" == "all" ]]; then
+            printf '  ./build.sh platform qemu [os] [options]\n'
+        else
+            printf '  ./build.sh platform qemu-%s [os] [options]\n' "${usage_arch}"
+        fi
+    else
+        printf '  scripts/qemu.sh <command> <os> [options]\n'
+        printf '\n'
+        printf 'Commands:\n'
+        printf '  aarch64                           Build all OS targets for AArch64 architecture\n'
+        printf '  x86_64                            Build all OS targets for x86_64 architecture\n'
+        printf '  riscv64                           Build all OS targets for RISC-V architecture\n'
+        printf '  all                               Build all supported architectures and OS targets\n'
+        printf '  help, -h, --help                  Display this help information\n'
+        printf '  clean                             Clean build output artifacts\n'
+    fi
     printf '\n'
     printf 'OS Targets:\n'
     printf '  linux                             Build the Linux OS\n'
@@ -53,11 +63,21 @@ usage() {
     printf '  * Generated rootfs artifacts are stored directly under IMAGES/rootfs.\n'
     printf '\n'
     printf 'Examples:\n'
-    printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
-    printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
-    printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
-    printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
-    printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'
+    if [[ -n "${usage_arch}" ]]; then
+        if [[ "${usage_arch}" == "all" ]]; then
+            printf '  ./build.sh platform qemu linux\n'
+            printf '  ./build.sh platform qemu all --rootfs busybox,alpine,debian\n'
+        else
+            printf '  ./build.sh platform qemu-%s linux\n' "${usage_arch}"
+            printf '  ./build.sh platform qemu-%s all --rootfs busybox,alpine,debian\n' "${usage_arch}"
+        fi
+    else
+        printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
+        printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
+        printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
+        printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
+        printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'
+    fi
 }
 
 qemu_arch_images_dir() {
@@ -372,7 +392,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         aarch64|riscv64|x86_64)
             ARCH="$cmd"
             if [[ $# -eq 0 || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == --* ]]; then
-                usage
+                QEMU_ARCH="${ARCH}" usage
                 exit 0
             fi
             OS="$1"
@@ -426,7 +446,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             [[ -n "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"
             ;;
         all)
-            if [[ $# -eq 0 || "${1:-}" == --* ]]; then
+            if [[ $# -eq 0 || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+                QEMU_ARCH="all" usage
+                exit 0
+            fi
+
+            if [[ "${1:-}" == --* ]]; then
                 OS="all"
             else
                 OS="$1"
