@@ -26,7 +26,9 @@ pack_usage() {
     printf '  help, -h, --help                  Display this help information\n'
     printf '\n'
     printf 'Notes:\n'
-    printf '  * By default, all direct children of <dir> are packaged into one .tar.gz archive.\n'
+    printf '  * Default mode is release-oriented:\n'
+    printf '      - each file under <dir>/rootfs becomes its own .tar.gz archive\n'
+    printf '      - each non-rootfs direct child of <dir> becomes its own .tar.gz archive\n'
     printf '  * With --per-file, each direct child of <dir> is packaged into an individual .tar.gz archive.\n'
     printf '  * Direct children can be either files or directories.\n'
     printf '\n'
@@ -86,6 +88,49 @@ pack_path() {
     fi
 }
 
+pack_release_layout() {
+    local source_dir="$1"
+    local count_packed=0
+    local count_skipped=0
+    local child_path
+    local rootfs_path="${source_dir}/rootfs"
+    local package_stem
+
+    mkdir -p "${RELEASE_DIR}"
+
+    if [[ -d "${rootfs_path}" ]]; then
+        while IFS= read -r child_path; do
+            [[ -n "${child_path}" ]] || continue
+            if [[ -f "${child_path}" ]]; then
+                package_stem="$(basename "${child_path}")"
+                pack_path "${child_path}" "${package_stem}"
+                count_packed=$((count_packed + 1))
+            elif [[ -d "${child_path}" ]]; then
+                package_stem="rootfs_$(basename "${child_path}")"
+                pack_path "${child_path}" "${package_stem}"
+                count_packed=$((count_packed + 1))
+            fi
+        done < <(pack_child_paths "${rootfs_path}")
+    fi
+
+    while IFS= read -r child_path; do
+        [[ -n "${child_path}" ]] || continue
+        if [[ "${child_path}" == "${rootfs_path}" ]]; then
+            continue
+        fi
+        package_stem="$(basename "${child_path}")"
+        pack_path "${child_path}" "${package_stem}"
+        count_packed=$((count_packed + 1))
+    done < <(pack_child_paths "${source_dir}")
+
+    if [[ ${count_packed} -eq 0 ]]; then
+        warn "Skipping empty directory ${source_dir}"
+        count_skipped=$((count_skipped + 1))
+    fi
+
+    success "Packaging completed: ${count_packed} archives created, skipped ${count_skipped} empty directories"
+}
+
 pack_child_paths() {
     local source_dir="$1"
     local child_path
@@ -101,31 +146,28 @@ pack_child_paths() {
 pack_images() {
     local count_packed=0
     local count_skipped=0
-    local input_basename
     local child_path
     local package_stem
     local child_count=0
 
     mkdir -p "${RELEASE_DIR}"
-    input_basename="$(basename "${IMAGES_DIR}")"
+
+    if [[ ${PACK_PER_FILE} -eq 0 ]]; then
+        pack_release_layout "${IMAGES_DIR}"
+        return 0
+    fi
 
     while IFS= read -r child_path; do
         [[ -n "${child_path}" ]] || continue
         child_count=$((child_count + 1))
-        if [[ ${PACK_PER_FILE} -eq 1 ]]; then
-            package_stem="$(basename "${child_path}")"
-            pack_path "${child_path}" "${package_stem}"
-            count_packed=$((count_packed + 1))
-        fi
+        package_stem="$(basename "${child_path}")"
+        pack_path "${child_path}" "${package_stem}"
+        count_packed=$((count_packed + 1))
     done < <(pack_child_paths "${IMAGES_DIR}")
 
     if [[ ${child_count} -eq 0 ]]; then
         warn "Skipping empty directory ${IMAGES_DIR}"
         count_skipped=$((count_skipped + 1))
-    elif [[ ${PACK_PER_FILE} -eq 0 ]]; then
-        info "Packing contents of ${IMAGES_DIR} -> ${RELEASE_DIR}/${input_basename}.tar.gz"
-        tar -czf "${RELEASE_DIR}/${input_basename}.tar.gz" -C "${IMAGES_DIR}" .
-        count_packed=$((count_packed + 1))
     fi
 
     success "Packaging completed: ${count_packed} archives created, skipped ${count_skipped} empty directories"
@@ -146,6 +188,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         die "Input directory does not exist: ${IMAGES_DIR}"
     fi
 
-    info "Starting to package system images under ${IMAGES_DIR} (per-file=${PACK_PER_FILE}) ..."
+    if [[ ${PACK_PER_FILE} -eq 1 ]]; then
+        info "Starting to package system images under ${IMAGES_DIR} with per-file archives ..."
+    else
+        info "Starting to package system images under ${IMAGES_DIR} with release-layout archives ..."
+    fi
     pack_images
 fi

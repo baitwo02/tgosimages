@@ -249,19 +249,21 @@ scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 
 ### 发布到 GitHub Release
 
+`--pack IMAGES,release` 表示先将 `IMAGES/` 中的产物打包到 `release/`，然后发布 `release/` 目录中的文件。
+
 ```bash
 ./build.sh release github \
+  --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
-  --tag v0.0.10 \
-  --dir release
+  --tag v0.0.10
 
 # 或直接调用脚本
 scripts/tools/github.sh \
+  --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
-  --tag v0.0.10 \
-  --dir release
+  --tag v0.0.10
 ```
 
 ## 本地分发

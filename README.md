@@ -249,19 +249,21 @@ scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 
 ### Publish to GitHub Release
 
+`--pack IMAGES,release` means packaging artifacts from `IMAGES/` first, then publishing the files generated under `release/`.
+
 ```bash
 ./build.sh release github \
+  --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
-  --tag v0.0.10 \
-  --dir release
+  --tag v0.0.10
 
 # Or call the script directly
 scripts/tools/github.sh \
+  --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
   --repo arceos-hypervisor/axvisor-guest \
-  --tag v0.0.10 \
-  --dir release
+  --tag v0.0.10
 ```
 
 ## Local Distribution
