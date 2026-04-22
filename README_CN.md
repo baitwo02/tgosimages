@@ -82,11 +82,17 @@
 - `orangepi-5-plus`
 - `rdk-s100p`
 - `bst-a1000`
+- `qemu`
 - `qemu-aarch64`
 - `qemu-riscv64`
 - `qemu-x86_64`
 
-其中 QEMU 底层调用的是 `scripts/platform/qemu.sh`，当前支持：
+其中：
+
+- `qemu` 会顺序执行 `qemu-aarch64`、`qemu-x86_64`、`qemu-riscv64`
+- `qemu-aarch64`、`qemu-riscv64`、`qemu-x86_64` 底层调用的是 `scripts/platform/qemu.sh`
+
+`scripts/platform/qemu.sh` 当前支持：
 
 - `aarch64`
 - `riscv64`
@@ -153,8 +159,9 @@ sudo apt install \
 
 # 平台 OS 构建
 ./build.sh platform phytiumpi
+./build.sh platform qemu all
 ./build.sh platform qemu-aarch64 linux
-./build.sh platform qemu riscv64 all
+./build.sh platform qemu all --rootfs busybox,alpine,debian
 
 # rootfs 构建
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs

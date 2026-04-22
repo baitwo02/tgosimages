@@ -82,11 +82,17 @@ These scripts generate filesystem contents or filesystem images.
 - `orangepi-5-plus`
 - `rdk-s100p`
 - `bst-a1000`
+- `qemu`
 - `qemu-aarch64`
 - `qemu-riscv64`
 - `qemu-x86_64`
 
-For QEMU, the underlying script is `scripts/platform/qemu.sh`, which currently supports:
+For QEMU:
+
+- `qemu` runs `qemu-aarch64`, `qemu-x86_64`, and `qemu-riscv64` sequentially
+- `qemu-aarch64`, `qemu-riscv64`, and `qemu-x86_64` are thin wrappers over `scripts/platform/qemu.sh`
+
+`scripts/platform/qemu.sh` currently supports:
 
 - `aarch64`
 - `riscv64`
@@ -153,8 +159,9 @@ Some platform builds require:
 
 # Platform-oriented OS builds
 ./build.sh platform phytiumpi
+./build.sh platform qemu all
 ./build.sh platform qemu-aarch64 linux
-./build.sh platform qemu riscv64 all
+./build.sh platform qemu all --rootfs busybox,alpine,debian
 
 # Rootfs builds
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs

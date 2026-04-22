@@ -27,6 +27,7 @@ usage() {
     printf '%s\n' "  qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
     printf '%s\n' "  qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
     printf '%s\n' "  qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
+    printf '%s\n' "  qemu                 -> build qemu-aarch64, qemu-x86_64, qemu-riscv64 sequentially"
     printf '%s\n' "  all                  -> build all platform targets sequentially"
     printf '%s\n' "  clean                -> clean all platform targets"
     printf '%s\n' ""
@@ -53,9 +54,10 @@ usage() {
     printf '%s\n' "Examples:"
     printf '%s\n' "  $0 platform phytiumpi             # show phytiumpi help"
     printf '%s\n' "  $0 platform phytiumpi linux"
+    printf '%s\n' "  $0 platform qemu                 # build all qemu architectures"
     printf '%s\n' "  $0 platform qemu-aarch64          # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64 linux"
-    printf '%s\n' "  $0 platform qemu riscv64 all --rootfs alpine,debian"
+    printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
     printf '%s\n' "  $0 os nimbos aarch64"
     printf '%s\n' "  $0 os arceos aarch64-dyn --bin-name arceos.bin"
     printf '%s\n' "  $0 os all <options>"
@@ -106,13 +108,47 @@ run_platform_target() {
             run_checked_script "$script_path" "$arch" "$@"
             ;;
         qemu)
+            local qemu_arches=(aarch64 x86_64 riscv64)
             local arch="${1:-}"
-            shift || true
-            [[ -n "$arch" ]] || run_checked_script "${PLATFORM_DIR}/qemu.sh"
-            if [[ $# -eq 0 ]]; then
-                run_checked_script "${PLATFORM_DIR}/qemu.sh" "$arch"
+
+            if [[ -z "$arch" ]]; then
+                for arch in "${qemu_arches[@]}"; do
+                    echo "Building: qemu-${arch} all --rootfs busybox,alpine,debian"
+                    "$0" platform "qemu-${arch}" all --rootfs busybox,alpine,debian || {
+                        echo "[ERROR] qemu-${arch} build failed" >&2
+                        exit 1
+                    }
+                done
+                return 0
             fi
-            run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "$@"
+
+            case "$arch" in
+                aarch64|x86_64|riscv64)
+                    shift || true
+                    if [[ $# -eq 0 ]]; then
+                        run_checked_script "${PLATFORM_DIR}/qemu.sh" "$arch"
+                    fi
+                    run_script "${PLATFORM_DIR}/qemu.sh" "$arch" "$@"
+                    ;;
+                *)
+                    local extra_args=("$@")
+                    for arch in "${qemu_arches[@]}"; do
+                        if [[ ${#extra_args[@]} -eq 0 ]]; then
+                            echo "Building: qemu-${arch} all --rootfs busybox,alpine,debian"
+                            "$0" platform "qemu-${arch}" all --rootfs busybox,alpine,debian || {
+                                echo "[ERROR] qemu-${arch} build failed" >&2
+                                exit 1
+                            }
+                        else
+                            echo "Building: qemu-${arch} ${extra_args[*]}"
+                            "$0" platform "qemu-${arch}" "${extra_args[@]}" || {
+                                echo "[ERROR] qemu-${arch} build failed" >&2
+                                exit 1
+                            }
+                        fi
+                    done
+                    ;;
+            esac
             ;;
         all)
             local extra_args=("$@")
