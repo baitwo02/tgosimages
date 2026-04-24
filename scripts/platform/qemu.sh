@@ -14,11 +14,11 @@ source "${SCRIPT_DIR}/../lib/rootfs.sh"
 LINUX_REPO_URL="https://github.com/torvalds/linux.git"
 LINUX_SRC_DIR="${BUILD_DIR}/qemu_linux"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/qemu"
-ROOTFS_IMAGES_DIR="${ROOT_DIR}/IMAGES/rootfs"
 ROOTFS_BUILDERS=()
 BUILD_ARGS=()
 ROOTFS_STAGE_DIR=""
 ROOTFS_STAGE_PREFIX=""
+PLATFORM_IMAGES_DIR=""
 
 # Display help information
 usage() {
@@ -82,12 +82,9 @@ usage() {
     fi
 }
 
-qemu_arch_images_dir() {
-    local arch="$1"
-    printf '%s\n' "${ROOT_DIR}/IMAGES/qemu-${arch}"
-}
-
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     info "Cloning ${ARCH} Linux source repository $LINUX_REPO_URL"
     clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
 
@@ -138,20 +135,18 @@ linux() {
 
         # If it's a full build, copy the image and create the root filesystem
         if [[ ${#commands[@]} -eq 0 ]] || [[ "${commands[0]}" == "all" ]]; then
-            LINUX_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/linux"
-            mkdir -p "${LINUX_IMAGES_DIR}"
+            mkdir -p "${linux_images_dir}"
             KIMG_PATH="${LINUX_SRC_DIR}/${kimg_subpath}"
             [[ -f "${KIMG_PATH}" ]] || die "Kernel image not found: ${KIMG_PATH}"
-            info "Copying image: ${KIMG_PATH} -> ${LINUX_IMAGES_DIR}/linux-qemu"
-            cp -f "${KIMG_PATH}" "${LINUX_IMAGES_DIR}/linux-qemu"
+            info "Copying image: ${KIMG_PATH} -> ${linux_images_dir}/linux-qemu"
+            cp -f "${KIMG_PATH}" "${linux_images_dir}/linux-qemu"
             
         fi
     else
         info "Building Linux: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} clean"
         make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "clean"
-        LINUX_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/linux"
-        info "Removing ${LINUX_IMAGES_DIR}/*"
-        rm -rf "${LINUX_IMAGES_DIR}"/* || true
+        info "Removing ${linux_images_dir}/*"
+        rm -rf "${linux_images_dir}"/* || true
     fi
 }
 
@@ -173,25 +168,17 @@ arceos() {
     #         ;;
     # esac
     #
-    # ARCEOS_IMAGES_DIR="$(qemu_arch_images_dir "${ARCH}")/arceos"
-    # info "Building ArceOS using common arceos.sh script for platform: $platform -> $ARCEOS_IMAGES_DIR"
+    # local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+    # info "Building ArceOS using common arceos.sh script for platform: $platform -> $arceos_images_dir"
     #
     # # Call the arceos.sh script with proper parameters
-    # bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "$ARCEOS_IMAGES_DIR" --image-name "arceos-qemu" "$@"
+    # bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "${arceos_images_dir}" --image-name "arceos-qemu" "$@"
     #
-    # if [[ "$@" != *"clean"* ]]; then
-    #     rootfs_stage_guest_tree "${ROOTFS_STAGE_DIR}" "$(qemu_arch_images_dir "${ARCH}")"
-    # fi
-
     warn "ArceOS build is temporarily disabled for qemu, skipping ${ARCH}"
 }
 
 nimbos() {
-    local qemu_images_dir
-    local nimbos_images_dir
-
-    qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
-    nimbos_images_dir="${qemu_images_dir}/nimbos"
+    local nimbos_images_dir="${PLATFORM_IMAGES_DIR}/nimbos"
 
     bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" --images-dir "${nimbos_images_dir}" --image-name "nimbos-qemu" "$@"
 
@@ -201,9 +188,7 @@ nimbos() {
 }
 
 zephyr() {
-    local zephyr_images_dir
-
-    zephyr_images_dir="$(qemu_arch_images_dir "${ARCH}")/zephyr"
+    local zephyr_images_dir="${PLATFORM_IMAGES_DIR}/zephyr"
 
     if [[ "${ARCH}" != "aarch64" ]]; then
         die "Zephyr guest build is currently only supported for qemu aarch64"
@@ -213,11 +198,7 @@ zephyr() {
 }
 
 freertos() {
-    local qemu_images_dir
-    local freertos_images_dir
-
-    qemu_images_dir="$(qemu_arch_images_dir "${ARCH}")"
-    freertos_images_dir="${qemu_images_dir}/freertos"
+    local freertos_images_dir="${PLATFORM_IMAGES_DIR}/freertos"
 
     if [[ "${ARCH}" != "aarch64" ]]; then
         die "FreeRTOS guest build is currently only supported for qemu aarch64"
@@ -231,6 +212,126 @@ freertos() {
     fi
 }
 
+build_rootfs_one() {
+    local rootfs_builder="$1"
+    local rootfs_script="${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh"
+    local guest_dir="${ROOTFS_STAGE_DIR}/guest"
+
+    if [[ ! -f "${rootfs_script}" ]]; then
+        die "Root filesystem script does not exist: ${rootfs_script}"
+    fi
+
+    info "Creating root filesystem: ${rootfs_script} -> IMAGES/rootfs"
+
+    case "${rootfs_builder}" in
+        busybox|alpine|debian)
+            [[ -d "${guest_dir}" ]] || die "Guest staging directory not found: ${guest_dir}"
+            bash "${rootfs_script}" "${ARCH}" --out_dir "${ROOT_DIR}/IMAGES/rootfs" --guest "${guest_dir}"
+            ;;
+        "")
+            return 0
+            ;;
+        *)
+            die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
+            ;;
+    esac
+
+    success "Root filesystem creation completed"
+}
+
+ensure_rootfs_stage_dir() {
+    if [[ -n "${ROOTFS_STAGE_DIR:-}" ]]; then
+        return 0
+    fi
+
+    ROOTFS_STAGE_DIR="$(mktemp -d "${BUILD_DIR}/${ROOTFS_STAGE_PREFIX:-qemu-rootfs}.XXXXXX")"
+}
+
+clean_rootfs_outputs() {
+    local rootfs_builder
+
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
+
+    for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
+        case "${rootfs_builder}" in
+            busybox)
+                rm -f "${ROOT_DIR}/IMAGES/rootfs/initramfs-${ARCH}-busybox.cpio.gz"
+                rm -f "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-busybox.img"
+                ;;
+            alpine)
+                rm -f "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img"
+                ;;
+            debian)
+                rm -f "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-debian.img"
+                ;;
+            *)
+                die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
+                ;;
+        esac
+    done
+}
+
+parse_common_args() {
+    BUILD_ARGS=()
+    ROOTFS_BUILDERS=()
+
+    local builder
+    local seen
+    local -A rootfs_seen=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --rootfs)
+                [[ $# -ge 2 ]] || die "--rootfs requires a value"
+                IFS=',' read -r -a seen <<< "$2"
+                for builder in "${seen[@]}"; do
+                    [[ -n "${builder}" ]] || continue
+                    case "${builder}" in
+                        busybox|alpine|debian)
+                            [[ -n "${rootfs_seen[${builder}]:-}" ]] && continue
+                            rootfs_seen["${builder}"]=1
+                            ROOTFS_BUILDERS+=("${builder}")
+                            ;;
+                        *)
+                            die "Unsupported rootfs builder: ${builder} (supported: busybox, alpine, debian)"
+                            ;;
+                    esac
+                done
+                shift 2
+                ;;
+            *)
+                BUILD_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+apply_default_rootfs() {
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] && return 0
+
+    case "${OS}" in
+        clean|help|-h|--help|"")
+            return 0
+            ;;
+    esac
+
+    ROOTFS_BUILDERS=(busybox alpine debian)
+}
+
+finalize_rootfs() {
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
+    [[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] || {
+        warn "No guest payload was staged for rootfs generation"
+        return 0
+    }
+
+    local rootfs_builder
+    for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
+        build_rootfs_one "${rootfs_builder}"
+    done
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift 1 || true
@@ -242,15 +343,15 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         aarch64|riscv64|x86_64)
             ARCH="$cmd"
             ROOTFS_ARCH="${ARCH}"
-            ROOTFS_STAGE_PREFIX="qemu-rootfs-${ARCH}"
+            PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/qemu-${ARCH}"
             if [[ $# -eq 0 || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" || "${1:-}" == --* ]]; then
                 QEMU_ARCH="${ARCH}" usage
                 exit 0
             fi
             OS="$1"
             shift 1 || true
-            rootfs_parse_build_args "$@"
-            rootfs_apply_default_builders "${OS}"
+            parse_common_args "$@"
+            apply_default_rootfs
             trap '[[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"' EXIT
             case "${OS}" in
                 linux)
@@ -285,16 +386,16 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         zephyr "clean"
                         freertos "clean"
                     fi
-                    rootfs_clean_generated_outputs
+                    clean_rootfs_outputs
                     ;;
                 *)
                     die "Unknown os: ${OS} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
                     ;;
             esac
             if [[ "${OS}" != "clean" ]]; then
-                rootfs_ensure_stage_dir
-                rootfs_stage_guest_tree "${ROOTFS_STAGE_DIR}" "$(qemu_arch_images_dir "${ARCH}")"
-                rootfs_finalize_builders
+                ensure_rootfs_stage_dir
+                rootfs_stage_guest_tree "${ROOTFS_STAGE_DIR}" "${PLATFORM_IMAGES_DIR}"
+                finalize_rootfs
             fi
             trap - EXIT
             [[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"
