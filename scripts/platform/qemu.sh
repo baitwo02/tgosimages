@@ -22,7 +22,7 @@ ROOTFS_STAGE_DIR=""
 usage() {
     local usage_arch="${QEMU_ARCH:-}"
 
-    printf 'Build supported OS for QEMU\n'
+    printf 'Build supported OS for QEMU with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     if [[ -n "${usage_arch}" ]]; then
@@ -45,7 +45,7 @@ usage() {
     printf '\n'
     printf 'OS Targets:\n'
     printf '  linux                             Build the Linux OS\n'
-    printf '  arceos                            Build the ArceOS OS\n'
+    printf '  arceos                            Build the ArceOS OS (temporarily disabled for QEMU)\n'
     printf '  nimbos                            Build the NimbOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
@@ -73,7 +73,7 @@ usage() {
         fi
     else
         printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
-        printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
+        printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS (temporarily disabled for QEMU)\n'
         printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
         printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
         printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'

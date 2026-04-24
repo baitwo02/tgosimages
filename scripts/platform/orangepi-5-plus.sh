@@ -21,7 +21,7 @@ UBOOT_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi/u-boot"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for orangepi-5-plus development board\n'
+    printf 'Build supported OS for orangepi-5-plus development board with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/orangepi.sh <command> [options]\n'

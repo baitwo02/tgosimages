@@ -17,7 +17,7 @@ ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/evm3588/arceos"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for EVM3588 development board\n'
+    printf 'Build supported OS for EVM3588 development board with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/evm3588.sh <command> [options]\n'

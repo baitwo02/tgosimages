@@ -18,7 +18,7 @@ RTTHREAD_IMAGES_DIR="${ROOT_DIR}/IMAGES/roc-rk3568-pc/rtthread"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for ROC-RK3588-PC development board\n'
+    printf 'Build supported OS for ROC-RK3588-PC development board with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/roc-rk3568-pc.sh <command> [options]\n'

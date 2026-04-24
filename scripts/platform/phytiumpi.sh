@@ -20,7 +20,7 @@ FREERTOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/freertos"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for Phytium development board\n'
+    printf 'Build supported OS for Phytium development board with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/phytiumpi.sh <command> [options]\n'

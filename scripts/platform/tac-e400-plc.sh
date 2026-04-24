@@ -17,7 +17,7 @@ ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/tac-e400-plc/arceos"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for TAC-E400 series intelligent PLC products\n'
+    printf 'Build supported OS for TAC-E400 series intelligent PLC products with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/tac-e400-plc.sh <command> [options]\n'

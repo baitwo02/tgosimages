@@ -71,7 +71,7 @@ ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/rdk-s100p/arceos"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for RDK S100P development board\n'
+    printf 'Build supported OS for RDK S100P development board with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/rdk-s100p.sh <command> [options]\n'

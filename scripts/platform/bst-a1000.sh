@@ -17,7 +17,7 @@ ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/bst-a1000/arceos"
 
 # Output help information
 usage() {
-    printf 'Build supported OS for BST-A1000 products\n'
+    printf 'Build supported OS for BST-A1000 products with rootfs support\n'
     printf '\n'
     printf 'Usage:\n'
     printf '  scripts/bst-a1000.sh <command> [options]\n'
