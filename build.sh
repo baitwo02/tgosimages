@@ -92,86 +92,6 @@ has_rootfs_override() {
     return 1
 }
 
-run_platform_target() {
-    local target="$1"
-    shift || true
-
-    case "$target" in
-        phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000)
-            local script_path="${PLATFORM_DIR}/${target}.sh"
-            run_checked_script "$script_path" "$@"
-            ;;
-        qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
-            local qemu_cmd
-            local script_path="${PLATFORM_DIR}/qemu.sh"
-            local qemu_arch=""
-            local qemu_args=("$@")
-            if [[ "$target" == "qemu" ]]; then
-                qemu_cmd="all"
-            else
-                qemu_cmd="${target#qemu-}"
-            fi
-            qemu_arch="${qemu_cmd}"
-            export QEMU_ARCH="${qemu_arch}"
-            if ! has_rootfs_override "${qemu_args[@]}"; then
-                qemu_args+=(--rootfs "busybox,alpine,debian")
-            fi
-            run_checked_script "$script_path" "$qemu_cmd" "${qemu_args[@]}"
-            ;;
-        all)
-            local extra_args=("$@")
-            for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
-                if [[ ${#extra_args[@]} -eq 0 ]]; then
-                    echo "Building: $p all"
-                    "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
-                else
-                    echo "Building: $p ${extra_args[*]}"
-                    "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
-                fi
-            done
-            ;;
-        clean)
-            for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
-                echo "Cleaning: $p"
-                "$0" platform "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
-            done
-            ;;
-    esac
-}
-
-run_os_target() {
-    local target="$1"
-    shift || true
-    local script_path="${OS_DIR}/${target}.sh"
-    run_checked_script "$script_path" "$@"
-}
-
-run_rootfs_target() {
-    local target="$1"
-    shift || true
-    local script_path="${ROOTFS_DIR}/${target}.sh"
-    run_checked_script "$script_path" "$@"
-}
-
-run_release_target() {
-    local subcmd="${1:-pack}"
-    shift || true
-
-    case "$subcmd" in
-        pack)
-            run_checked_script "${TOOLS_DIR}/pack.sh" "$@"
-            ;;
-        github)
-            run_checked_script "${TOOLS_DIR}/github.sh" "$@"
-            ;;
-        *)
-            echo "[ERROR] Unknown release subcommand: $subcmd" >&2
-            usage
-            exit 2
-            ;;
-    esac
-}
-
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift || true
@@ -186,8 +106,41 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             shift || true
             [[ -n "$target" ]] || { echo "[ERROR] Missing platform target" >&2; usage; exit 2; }
             case "$target" in
-                phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000|qemu-aarch64|qemu-x86_64|qemu-riscv64|qemu|all|clean)
-                    run_platform_target "$target" "$@"
+                phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000)
+                    script_path="${PLATFORM_DIR}/${target}.sh"
+                    run_checked_script "$script_path" "$@"
+                    ;;
+                qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
+                    script_path="${PLATFORM_DIR}/qemu.sh"
+                    qemu_args=("$@")
+                    if [[ "$target" == "qemu" ]]; then
+                        qemu_cmd="all"
+                    else
+                        qemu_cmd="${target#qemu-}"
+                    fi
+                    export QEMU_ARCH="${qemu_cmd}"
+                    if ! has_rootfs_override "${qemu_args[@]}"; then
+                        qemu_args+=(--rootfs "busybox,alpine,debian")
+                    fi
+                    run_checked_script "$script_path" "$qemu_cmd" "${qemu_args[@]}"
+                    ;;
+                all)
+                    extra_args=("$@")
+                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
+                        if [[ ${#extra_args[@]} -eq 0 ]]; then
+                            echo "Building: $p all"
+                            "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                        else
+                            echo "Building: $p ${extra_args[*]}"
+                            "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
+                        fi
+                    done
+                    ;;
+                clean)
+                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
+                        echo "Cleaning: $p"
+                        "$0" platform "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
+                    done
                     ;;
                 *)
                     echo "[ERROR] Unknown platform target: $target" >&2
@@ -220,7 +173,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     done
                     ;;
                 arceos|zephyr|freertos|rtthread|nimbos)
-                    run_os_target "$target" "$@"
+                    script_path="${OS_DIR}/${target}.sh"
+                    run_checked_script "$script_path" "$@"
                     ;;
                 *)
                     echo "[ERROR] Unknown independent OS target: $target" >&2
@@ -252,7 +206,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     done
                     ;;
                 busybox|alpine|debian)
-                    run_rootfs_target "$target" "$@"
+                    script_path="${ROOTFS_DIR}/${target}.sh"
+                    run_checked_script "$script_path" "$@"
                     ;;
                 *)
                     echo "[ERROR] Unknown rootfs target: $target" >&2
@@ -262,7 +217,21 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             esac
             ;;
         release)
-            run_release_target "$@"
+            subcmd="${1:-pack}"
+            shift || true
+            case "$subcmd" in
+                pack)
+                    run_checked_script "${TOOLS_DIR}/pack.sh" "$@"
+                    ;;
+                github)
+                    run_checked_script "${TOOLS_DIR}/github.sh" "$@"
+                    ;;
+                *)
+                    echo "[ERROR] Unknown release subcommand: $subcmd" >&2
+                    usage
+                    exit 2
+                    ;;
+            esac
             ;;
         cleanall|distclean)
             echo "[CLEANALL] Removing build, IMAGES and release directories"
