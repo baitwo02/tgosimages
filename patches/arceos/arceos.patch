@@ -51,6 +51,31 @@ index 9b2f312..e2538ea 100644
  axlog = {workspace = true}
  axplat.workspace = true
  cfg-if = "1.0"
+diff --git a/Cargo.toml b/Cargo.toml
+index c655bca..1d39b35 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -58,15 +58,15 @@ axruntime = { path = "modules/axruntime" }
+ axsync = { path = "modules/axsync" }
+ axtask = { path = "modules/axtask" }
+ 
+-axplat = { git = "https://github.com/arceos-hypervisor/axplat_crates", tag="vmm-v0.3.0" }
++axplat = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
+ 
+-axplat-x86-pc = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0" }
+-axplat-aarch64-bsta1000b = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0"}
+-axplat-aarch64-phytium-pi = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0" }
+-axplat-aarch64-qemu-virt = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0" }
+-axplat-aarch64-raspi = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0" }
+-axplat-riscv64-qemu-virt = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0"}
+-axplat-loongarch64-qemu-virt = {git = "https://github.com/arceos-hypervisor/axplat_crates.git", tag = "vmm-v0.3.0"}
++axplat-x86-pc = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-aarch64-bsta1000b = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-aarch64-phytium-pi = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-aarch64-qemu-virt = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-aarch64-raspi = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-riscv64-qemu-virt = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
++axplat-loongarch64-qemu-virt = { git = "https://github.com/arceos-org/axplat_crates.git", tag = "dev-v03" }
 diff --git a/scripts/make/features.mk b/scripts/make/features.mk
 index 7a7f153..9a01ebb 100644
 --- a/scripts/make/features.mk
