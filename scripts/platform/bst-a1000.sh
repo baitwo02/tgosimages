@@ -7,13 +7,14 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
+source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL="git@github.com:arceos-hypervisor/bst-a1000.git"
 LINUX_SRC_DIR="${BUILD_DIR}/bst-a1000"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/bst-a1000"
-LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/bst-a1000/linux"
-ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/bst-a1000/arceos"
+PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/bst-a1000"
+PLATFORM_ROOTFS_DIR="${ROOT_DIR}/IMAGES/rootfs"
 
 # Output help information
 usage() {
@@ -38,6 +39,8 @@ usage() {
 }
 
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Cloning Linux source repository $LINUX_REPO_URL -> $LINUX_SRC_DIR"
         clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
@@ -61,28 +64,30 @@ linux() {
             info "Starting compilation: make CROSS_COMPILE=aarch64-linux-gnu-  ARCH=arm64 O=build_bst -j$(nproc) $@"
             make CROSS_COMPILE=aarch64-linux-gnu-  ARCH=arm64 O=build_bst -j$(nproc) $@ 2>&1
 
-            info "Copying build artifacts -> $LINUX_IMAGES_DIR"
-            mkdir -p "$LINUX_IMAGES_DIR"
-            cp "$LINUX_SRC_DIR/build_bst/arch/arm64/boot/Image" "$LINUX_IMAGES_DIR/"
-            cp "$LINUX_SRC_DIR/../bst_dt/bsta1000b-fada.dtb" "$LINUX_IMAGES_DIR/"
-            cp "$LINUX_SRC_DIR/../bst_dt/bsta1000b-fadb.dtb" "$LINUX_IMAGES_DIR/"
+            info "Copying build artifacts -> $linux_images_dir"
+            mkdir -p "$linux_images_dir"
+            cp "$LINUX_SRC_DIR/build_bst/arch/arm64/boot/Image" "$linux_images_dir/"
+            cp "$LINUX_SRC_DIR/../bst_dt/bsta1000b-fada.dtb" "$linux_images_dir/"
+            cp "$LINUX_SRC_DIR/../bst_dt/bsta1000b-fadb.dtb" "$linux_images_dir/"
         else
             info "Cleaning: make -j$(nproc) clean"
             make -j$(nproc) clean 2>&1
-            info "Removing ${LINUX_IMAGES_DIR}/*"
-            rm ${LINUX_IMAGES_DIR}/* || true
+            info "Removing ${linux_images_dir}/*"
+            rm "${linux_images_dir}"/* || true
         fi
         popd >/dev/null
     fi
 }
 
 arceos() {
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building ArceOS using common arceos.sh script"
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name bst-a1000 $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name bst-a1000 "$@"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -113,4 +118,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
+    # if [[ "$cmd" != "clean" ]]; then
+    #     rootfs_inject_guest_stage "$linux_images_dir/bst-a1000.img" "${PLATFORM_IMAGES_DIR}"
+    # fi
 fi

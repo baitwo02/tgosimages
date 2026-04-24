@@ -7,16 +7,14 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
+source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL="https://gitee.com/phytium_embedded/phytium-pi-os.git"
 LINUX_SRC_DIR="${BUILD_DIR}/phytium-pi-os"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/phytiumpi"
-LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/linux"
-ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/arceos"
-RTTHREAD_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/rtthread"
-ZEPHYR_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/zephyr"
-FREERTOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi/freertos"
+PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/phytiumpi"
+PLATFORM_ROOTFS_DIR="${ROOT_DIR}/IMAGES/rootfs"
 
 # Output help information
 usage() {
@@ -44,6 +42,8 @@ usage() {
 }
 
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Cloning Linux source repository $LINUX_REPO_URL -> $LINUX_SRC_DIR"
         clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
@@ -66,62 +66,72 @@ linux() {
             info "Starting compilation: make $@"
             make $@
             
-            info "Copying build artifacts: $LINUX_SRC_DIR/output/images -> $LINUX_IMAGES_DIR"
-            mkdir -p "$LINUX_IMAGES_DIR"
+            info "Copying build artifacts: $LINUX_SRC_DIR/output/images -> $linux_images_dir"
+            mkdir -p "$linux_images_dir"
             rsync -av --ignore-missing-args "$LINUX_SRC_DIR/output/images/fip-all.bin" \
             "$LINUX_SRC_DIR/output/images/fitImage" \
             "$LINUX_SRC_DIR/output/images/kernel.its" \
             "$LINUX_SRC_DIR/output/images/Image" \
             "$LINUX_SRC_DIR/output/images/phytiumpi_firefly.dtb" \
-            "$LINUX_IMAGES_DIR/"
-            mv "$LINUX_IMAGES_DIR/phytiumpi_firefly.dtb" "$LINUX_IMAGES_DIR/phytiumpi.dtb"
-            gzip -dc "$LINUX_SRC_DIR/output/images/Image.gz" > "$LINUX_IMAGES_DIR/phytiumpi"
+            "$linux_images_dir/"
+            mv "$linux_images_dir/phytiumpi_firefly.dtb" "$linux_images_dir/phytiumpi.dtb"
+            gzip -dc "$LINUX_SRC_DIR/output/images/Image.gz" > "$linux_images_dir/phytiumpi"
+            mv "$linux_images_dir/sdcard.img" "$PLATFORM_ROOTFS_DIR/phytiumpi.img"
         else
             info "Cleaning: make $@"
             make $@
-            info "Removing ${LINUX_IMAGES_DIR}/*"
-            rm ${LINUX_IMAGES_DIR}/* || true
+            info "Removing ${linux_images_dir}/*"
+            rm "${linux_images_dir}"/* || true
+            rm -f "${PLATFORM_ROOTFS_DIR}/phytiumpi.img" || true
         fi
         popd >/dev/null
     fi
 }
 
 arceos() {
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building ArceOS using common arceos.sh script"
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name phytiumpi $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name phytiumpi "$@"
 }
 
 rtthread() {
+    local rtthread_images_dir="${PLATFORM_IMAGES_DIR}/rtthread"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "phytiumpi" $@
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "${rtthread_images_dir}" "--image-name" "phytiumpi" "$@"
     else
         info "Cleaning RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "phytiumpi" "-c"
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" phytiumpi "--images-dir" "${rtthread_images_dir}" "--image-name" "phytiumpi" "-c"
     fi
 }
 
 zephyr() {
+    local zephyr_images_dir="${PLATFORM_IMAGES_DIR}/zephyr"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi --images-dir "${ZEPHYR_IMAGES_DIR}" "$@"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi --images-dir "${zephyr_images_dir}" "$@"
     else
         info "Cleaning Zephyr using common zephyr.sh script"
-        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi clean --images-dir "${ZEPHYR_IMAGES_DIR}"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" phytiumpi clean --images-dir "${zephyr_images_dir}"
     fi
 }
 
 freertos() {
+    local freertos_images_dir="${PLATFORM_IMAGES_DIR}/freertos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi
+        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi --images-dir "${freertos_images_dir}" --image-name "phytiumpi" "$@"
     else
         info "Cleaning FreeRTOS using common freertos.sh script"
-        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi clean
+        bash "${SCRIPT_DIR}/../os/freertos.sh" phytiumpi clean --images-dir "${freertos_images_dir}" --image-name "phytiumpi"
     fi
 }
 
@@ -174,4 +184,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
+    if [[ "$cmd" != "clean" ]]; then
+        rootfs_inject_guest_stage "$PLATFORM_ROOTFS_DIR/phytiumpi.img" "${PLATFORM_IMAGES_DIR}"
+    fi
 fi

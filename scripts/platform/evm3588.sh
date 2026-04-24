@@ -7,13 +7,14 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
+source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL=""
 LINUX_SRC_DIR="${BUILD_DIR}/evm3588"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/evm3588"
-LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/evm3588/linux"
-ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/evm3588/arceos"
+PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/evm3588"
+PLATFORM_ROOTFS_DIR="${ROOT_DIR}/IMAGES/rootfs"
 
 # Output help information
 usage() {
@@ -38,6 +39,8 @@ usage() {
 }
 
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building to build the Linux system..."
     else
@@ -65,13 +68,14 @@ linux() {
             info "Building remotely via SSH：ssh ${REMOTE_HOST} cd '${REMOTE_DIR}' && ./build.sh $@"
             ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && ./build.sh $@"
 
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/boot.img" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/parameter.txt" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/evm3588"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${LINUX_IMAGES_DIR}/evm3588.dtb"
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/boot.img" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/parameter.txt" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/evm3588"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${linux_images_dir}/evm3588.dtb"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img" 2>/dev/null || true
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             if [[ -d "$REMOTE_DIR" ]]; then
@@ -81,13 +85,14 @@ linux() {
                 ./build.sh $@
             fi
 
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
-            cp "${REMOTE_DIR}/rockdev/boot.img" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/rockdev/parameter.txt" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/evm3588" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${LINUX_IMAGES_DIR}/evm3588.dtb" 2>/dev/null || true
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
+            cp "${REMOTE_DIR}/rockdev/boot.img" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/rockdev/parameter.txt" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/evm3588" 2>/dev/null || true
+            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${linux_images_dir}/evm3588.dtb" 2>/dev/null || true
+            cp "${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img" 2>/dev/null || true
         fi
     else
         if $is_remote; then
@@ -103,18 +108,21 @@ linux() {
             fi
         fi
 
-        info "Removing ${LINUX_IMAGES_DIR}/*"
-        rm -f ${LINUX_IMAGES_DIR}/* || true
+        info "Removing ${linux_images_dir}/*"
+        rm -f "${linux_images_dir}"/* || true
+        rm -f "${PLATFORM_ROOTFS_DIR}/evm3588.img" || true
     fi
 }
 
 arceos() {
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building ArceOS using common arceos.sh script"
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name evm3588_arceos $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name evm3588_arceos "$@"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -145,4 +153,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
+    if [[ "$cmd" != "clean" ]]; then
+        rootfs_inject_guest_stage "${PLATFORM_ROOTFS_DIR}/evm3588.img" "${PLATFORM_IMAGES_DIR}"
+    fi
 fi

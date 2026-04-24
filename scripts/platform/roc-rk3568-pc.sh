@@ -7,14 +7,14 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
+source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL=""
 LINUX_SRC_DIR="${BUILD_DIR}/roc-rk3568-pc"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/roc-rk3568-pc"
-LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/roc-rk3568-pc/linux"
-ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/roc-rk3568-pc/arceos"
-RTTHREAD_IMAGES_DIR="${ROOT_DIR}/IMAGES/roc-rk3568-pc/rtthread"
+PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/roc-rk3568-pc"
+PLATFORM_ROOTFS_DIR="${ROOT_DIR}/IMAGES/rootfs"
 
 # Output help information
 usage() {
@@ -40,6 +40,8 @@ usage() {
 }
 
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building to build the Linux system..."
     else
@@ -67,13 +69,14 @@ linux() {
             info "Building remotely via SSH: ssh ${REMOTE_HOST} cd '${REMOTE_DIR}' && ./build.sh firefly_rk3568_roc-rk3568-pc_ubuntu_defconfig && ./build.sh $@"
             ssh "${REMOTE_HOST}" "cd '${REMOTE_DIR}' && ./build.sh firefly_rk3568_roc-rk3568-pc_ubuntu_defconfig && ./build.sh $@"
 
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${LINUX_IMAGES_DIR}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/"
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${linux_images_dir}/roc-rk3568-pc.img"
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             # If the REMOTE_DIR doesn't exist locally, fall back to running commands in place (assume local repo available at REMOTE_DIR)
@@ -85,14 +88,16 @@ linux() {
                 ./build.sh firefly_rk3568_roc-rk3568-pc_ubuntu_defconfig && ./build.sh $@
             fi
 
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${LINUX_IMAGES_DIR}/roc-rk3568-pc.dtb" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/roc-rk3568-pc" 2>/dev/null || true
-            cp "${REMOTE_DIR}/u-boot/uboot.img" "${LINUX_IMAGES_DIR}/roc-rk3568-pc_uboot.img" 2>/dev/null || true
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
+            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${linux_images_dir}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${linux_images_dir}/roc-rk3568-pc.dtb" 2>/dev/null || true
+            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/roc-rk3568-pc" 2>/dev/null || true
+            cp "${REMOTE_DIR}/u-boot/uboot.img" "${linux_images_dir}/roc-rk3568-pc_uboot.img" 2>/dev/null || true
+            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img" 2>/dev/null || true
+
         fi
     else
         if $is_remote; then
@@ -108,27 +113,32 @@ linux() {
             fi
         fi
 
-        info "Removing ${LINUX_IMAGES_DIR}/*"
-        rm -f ${LINUX_IMAGES_DIR}/* || true
+        info "Removing ${linux_images_dir}/*"
+        rm -f "${linux_images_dir}"/* || true
+        rm -f "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img" || true
     fi
 }
 
 arceos() {
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building ArceOS using common arceos.sh script"
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name roc-rk3568-pc $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name roc-rk3568-pc "$@"
 }
 
 rtthread() {
+    local rtthread_images_dir="${PLATFORM_IMAGES_DIR}/rtthread"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "roc-rk3568-pc" $@
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "${rtthread_images_dir}" "--image-name" "roc-rk3568-pc" "$@"
     else
         info "Cleaning RT-Thread using common rtthread.sh script"
-        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "$RTTHREAD_IMAGES_DIR" "--image-name" "roc-rk3568-pc" "--patch-dir" "" "-c"
+        bash "${SCRIPT_DIR}/../os/rtthread.sh" roc-rk3568-pc "--images-dir" "${rtthread_images_dir}" "--image-name" "roc-rk3568-pc" "--patch-dir" "" "-c"
     fi
 }
 
@@ -167,4 +177,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
+    if [[ "$cmd" != "clean" ]]; then
+        rootfs_inject_guest_stage "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img" "${PLATFORM_IMAGES_DIR}"
+    fi
 fi

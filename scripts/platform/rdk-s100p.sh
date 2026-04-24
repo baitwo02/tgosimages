@@ -7,12 +7,14 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 source "${SCRIPT_DIR}/../lib/utils.sh"
+source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Repository and directory configuration
 LINUX_REPO_URL=""
 LINUX_SRC_DIR="${BUILD_DIR}/rdk-s100p"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/rdk-s100p"
-LINUX_IMAGES_DIR="${ROOT_DIR}/IMAGES/rdk-s100p/linux"
+PLATFORM_IMAGES_DIR="${ROOT_DIR}/IMAGES/rdk-s100p"
+PLATFORM_ROOTFS_DIR="${ROOT_DIR}/IMAGES/rootfs"
 
 # Apply patches to defconfig and uboot config (remote via SSH)
 apply_patches_remote() {
@@ -67,8 +69,6 @@ apply_patches_remote() {
     done
 }
 
-ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/rdk-s100p/arceos"
-
 # Output help information
 usage() {
     printf 'Build supported OS for RDK S100P development board with rootfs support\n'
@@ -92,6 +92,8 @@ usage() {
 }
 
 linux() {
+    local linux_images_dir="${PLATFORM_IMAGES_DIR}/linux"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building to build the Linux system..."
     else
@@ -132,14 +134,14 @@ linux() {
             ssh "${REMOTE_HOST}" "cd '${BOOTLOADER_DIR}/build' && ./xbuild.sh lunch 1 && ./xbuild.sh uboot && ./xbuild.sh pack"
 
             # Copy kernel and uboot artifacts
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
             # Copy kernel image
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/rdk-s100p" || true
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p" || true
             # Copy built kernel dtb needed for release
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${KERNEL_DTB_REL}" "${LINUX_IMAGES_DIR}/" || true
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/" || true
             # Copy uboot.img
-            scp "${REMOTE_HOST}:${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${LINUX_IMAGES_DIR}/" || true
+            scp "${REMOTE_HOST}:${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/" || true
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             if [[ -d "$REMOTE_DIR" ]]; then
@@ -161,14 +163,14 @@ linux() {
             fi
 
             # Copy kernel and uboot artifacts
-            info "Copying build artifacts: -> $LINUX_IMAGES_DIR"
-            mkdir -p "${LINUX_IMAGES_DIR}"
+            info "Copying build artifacts: -> $linux_images_dir"
+            mkdir -p "${linux_images_dir}"
             # Copy kernel image
-            cp "${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${LINUX_IMAGES_DIR}/rdk-s100p" 2>/dev/null || true
+            cp "${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p" 2>/dev/null || true
             # Copy built kernel dtb needed for release
-            cp "${REMOTE_DIR}/${KERNEL_DTB_REL}" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
+            cp "${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/" 2>/dev/null || true
             # Copy uboot.img
-            cp "${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${LINUX_IMAGES_DIR}/" 2>/dev/null || true
+            cp "${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/" 2>/dev/null || true
         fi
     else
         if $is_remote; then
@@ -186,18 +188,20 @@ linux() {
             fi
         fi
 
-        info "Removing ${LINUX_IMAGES_DIR}/*"
-        rm -f ${LINUX_IMAGES_DIR}/* || true
+        info "Removing ${linux_images_dir}/*"
+        rm -f "${linux_images_dir}"/* || true
     fi
 }
 
 arceos() {
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+
     if [[ "$@" != *"clean"* ]]; then
         info "Building ArceOS using common arceos.sh script"
     else
         info "Cleaning ArceOS using common arceos.sh script"
     fi
-    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "$ARCEOS_IMAGES_DIR" --image-name rdk-s100p $@
+    bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name rdk-s100p "$@"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -226,4 +230,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
+    # if [[ "$cmd" != "clean" ]]; then
+    #     rootfs_inject_guest_stage "$linux_images_dir/rdk-s100p.img" "${PLATFORM_IMAGES_DIR}"
+    # fi
 fi
