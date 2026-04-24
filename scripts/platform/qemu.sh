@@ -16,8 +16,6 @@ LINUX_SRC_DIR="${BUILD_DIR}/qemu_linux"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/qemu"
 ROOTFS_BUILDERS=()
 BUILD_ARGS=()
-ROOTFS_STAGE_DIR=""
-ROOTFS_STAGE_PREFIX=""
 PLATFORM_IMAGES_DIR=""
 
 # Display help information
@@ -212,42 +210,7 @@ freertos() {
     fi
 }
 
-build_rootfs_one() {
-    local rootfs_builder="$1"
-    local rootfs_script="${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh"
-    local guest_dir="${ROOTFS_STAGE_DIR}/guest"
-
-    if [[ ! -f "${rootfs_script}" ]]; then
-        die "Root filesystem script does not exist: ${rootfs_script}"
-    fi
-
-    info "Creating root filesystem: ${rootfs_script} -> IMAGES/rootfs"
-
-    case "${rootfs_builder}" in
-        busybox|alpine|debian)
-            [[ -d "${guest_dir}" ]] || die "Guest staging directory not found: ${guest_dir}"
-            bash "${rootfs_script}" "${ARCH}" --out_dir "${ROOT_DIR}/IMAGES/rootfs" --guest "${guest_dir}"
-            ;;
-        "")
-            return 0
-            ;;
-        *)
-            die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
-            ;;
-    esac
-
-    success "Root filesystem creation completed"
-}
-
-ensure_rootfs_stage_dir() {
-    if [[ -n "${ROOTFS_STAGE_DIR:-}" ]]; then
-        return 0
-    fi
-
-    ROOTFS_STAGE_DIR="$(mktemp -d "${BUILD_DIR}/${ROOTFS_STAGE_PREFIX:-qemu-rootfs}.XXXXXX")"
-}
-
-clean_rootfs_outputs() {
+qemu_rootfs_clean_outputs() {
     local rootfs_builder
 
     [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
@@ -271,7 +234,7 @@ clean_rootfs_outputs() {
     done
 }
 
-parse_common_args() {
+qemu_rootfs_parse_args() {
     BUILD_ARGS=()
     ROOTFS_BUILDERS=()
 
@@ -305,10 +268,10 @@ parse_common_args() {
                 ;;
         esac
     done
-}
 
-apply_default_rootfs() {
-    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] && return 0
+    if [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]]; then
+        return 0
+    fi
 
     case "${OS}" in
         clean|help|-h|--help|"")
@@ -319,17 +282,40 @@ apply_default_rootfs() {
     ROOTFS_BUILDERS=(busybox alpine debian)
 }
 
-finalize_rootfs() {
-    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
-    [[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] || {
-        warn "No guest payload was staged for rootfs generation"
-        return 0
-    }
-
+qemu_rootfs_build_from_platform_dir() {
+    local guest_dir="${PLATFORM_IMAGES_DIR}"
+    local stage_dir
     local rootfs_builder
+    local rootfs_script
+
+    [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
+    if [[ ! -d "${guest_dir}" ]]; then
+        warn "No guest payload was produced for qemu ${ARCH}, skipping rootfs generation"
+        return 0
+    fi
+
+    stage_dir="$(mktemp -d "${BUILD_DIR}/qemu-rootfs-${ARCH}.XXXXXX")"
+    trap 'rm -rf "${stage_dir}"' RETURN
+    rootfs_stage_guest_tree "${stage_dir}" "${guest_dir}"
+
     for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
-        build_rootfs_one "${rootfs_builder}"
+        rootfs_script="${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh"
+        [[ -f "${rootfs_script}" ]] || die "Root filesystem script does not exist: ${rootfs_script}"
+
+        info "Creating root filesystem: ${rootfs_script} -> IMAGES/rootfs"
+        case "${rootfs_builder}" in
+            busybox|alpine|debian)
+                bash "${rootfs_script}" "${ARCH}" --out_dir "${ROOT_DIR}/IMAGES/rootfs" --guest "${stage_dir}/guest"
+                ;;
+            *)
+                die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
+                ;;
+        esac
+        success "Root filesystem creation completed"
     done
+
+    trap - RETURN
+    rm -rf "${stage_dir}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -350,9 +336,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             fi
             OS="$1"
             shift 1 || true
-            parse_common_args "$@"
-            apply_default_rootfs
-            trap '[[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"' EXIT
+            qemu_rootfs_parse_args "$@"
             case "${OS}" in
                 linux)
                     linux "${BUILD_ARGS[@]}"
@@ -386,19 +370,15 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         zephyr "clean"
                         freertos "clean"
                     fi
-                    clean_rootfs_outputs
+                    qemu_rootfs_clean_outputs
                     ;;
                 *)
                     die "Unknown os: ${OS} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
                     ;;
             esac
             if [[ "${OS}" != "clean" ]]; then
-                ensure_rootfs_stage_dir
-                rootfs_stage_guest_tree "${ROOTFS_STAGE_DIR}" "${PLATFORM_IMAGES_DIR}"
-                finalize_rootfs
+                qemu_rootfs_build_from_platform_dir
             fi
-            trap - EXIT
-            [[ -n "${ROOTFS_STAGE_DIR:-}" && -d "${ROOTFS_STAGE_DIR}" ]] && rm -rf "${ROOTFS_STAGE_DIR}"
             ;;
         all)
             if [[ $# -eq 0 || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
