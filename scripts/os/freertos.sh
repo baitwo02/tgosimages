@@ -440,7 +440,7 @@ parse_image_args() {
 
 qemu_aarch64() {
     local images_dir="${ROOT_DIR}/IMAGES/qemu-aarch64/freertos"
-    local image_name="qemu-aarch64"
+    local image_name="freertos-qemu"
     parse_image_args "${images_dir}" "${image_name}" images_dir image_name "$@"
     local args=("${FREERTOS_PARSED_ARGS[@]}")
 
