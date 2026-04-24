@@ -82,12 +82,6 @@ run_checked_script() {
     exec "$script_path" "$@"
 }
 
-run_script() {
-    local script_path="$1"
-    shift || true
-    run_checked_script "$script_path" "$@"
-}
-
 has_rootfs_override() {
     local arg
     for arg in "$@"; do
@@ -105,9 +99,6 @@ run_platform_target() {
     case "$target" in
         phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000)
             local script_path="${PLATFORM_DIR}/${target}.sh"
-            if [[ $# -eq 0 ]]; then
-                run_checked_script "$script_path"
-            fi
             run_checked_script "$script_path" "$@"
             ;;
         qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
@@ -122,9 +113,6 @@ run_platform_target() {
             fi
             qemu_arch="${qemu_cmd}"
             export QEMU_ARCH="${qemu_arch}"
-            if [[ $# -eq 0 ]]; then
-                run_checked_script "$script_path"
-            fi
             if ! has_rootfs_override "${qemu_args[@]}"; then
                 qemu_args+=(--rootfs "busybox,alpine,debian")
             fi
@@ -134,13 +122,8 @@ run_platform_target() {
             local extra_args=("$@")
             for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
                 if [[ ${#extra_args[@]} -eq 0 ]]; then
-                    if [[ "$p" == qemu-* ]]; then
-                        echo "Building: $p all"
-                        "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
-                    else
-                        echo "Building: $p all"
-                        "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
-                    fi
+                    echo "Building: $p all"
+                    "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
                 else
                     echo "Building: $p ${extra_args[*]}"
                     "$0" platform "$p" "${extra_args[@]}" || { echo "[ERROR] $p build failed" >&2; exit 1; }
