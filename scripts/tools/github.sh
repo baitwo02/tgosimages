@@ -501,11 +501,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         for file in "${files[@]}"; do
             if [[ -f "${file}" ]]; then
                 if github_upload "${upload_url}" "${file}"; then
-                    ((uploaded_count++))
+                    ((uploaded_count+=1))
                 fi
             else
                 warn "Skipping non-file asset: ${file}"
-                ((skipped_count++))
+                ((skipped_count+=1))
             fi
         done
     fi
