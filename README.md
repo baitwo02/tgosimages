@@ -86,17 +86,19 @@ These scripts generate filesystem contents or filesystem images.
 - `qemu-aarch64`
 - `qemu-riscv64`
 - `qemu-x86_64`
+- `qemu-loongarch64`
 
 For QEMU:
 
-- `qemu` runs `qemu-aarch64`, `qemu-x86_64`, and `qemu-riscv64` sequentially
-- `qemu-aarch64`, `qemu-riscv64`, and `qemu-x86_64` are thin wrappers over `scripts/platform/qemu.sh`
+- `qemu` runs `qemu-aarch64`, `qemu-x86_64`, `qemu-riscv64`, and `qemu-loongarch64` sequentially
+- `qemu-aarch64`, `qemu-riscv64`, `qemu-x86_64`, and `qemu-loongarch64` are thin wrappers over `scripts/platform/qemu.sh`
 
 `scripts/platform/qemu.sh` currently supports:
 
 - `aarch64`
 - `riscv64`
 - `x86_64`
+- `loongarch64`
 
 ### Rootfs Targets
 
@@ -197,7 +199,7 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 
 - Generates both initramfs and ext4 rootfs images
 - Used by `scripts/platform/qemu.sh` for QEMU Linux and ArceOS flows
-- Currently supports `aarch64`, `riscv64`, and `x86_64`
+- Currently supports `aarch64`, `loongarch64`, `riscv64`, and `x86_64`
 
 ### Alpine
 
@@ -229,6 +231,7 @@ Typical QEMU Linux files:
 
 - `Image` for `aarch64` / `riscv64`
 - `bzImage` for `x86_64`
+- `vmlinuz.efi` for `loongarch64`
 - BusyBox rootfs artifacts such as `busybox-initramfs-<arch>.cpio.gz` and `busybox-rootfs-<arch>.img`
 
 ## QEMU Validation

@@ -27,6 +27,7 @@ usage() {
     printf '%s\n' "  qemu-aarch64         -> scripts/platform/qemu.sh aarch64"
     printf '%s\n' "  qemu-x86_64          -> scripts/platform/qemu.sh x86_64"
     printf '%s\n' "  qemu-riscv64         -> scripts/platform/qemu.sh riscv64"
+    printf '%s\n' "  qemu-loongarch64     -> scripts/platform/qemu.sh loongarch64"
     printf '%s\n' "  qemu                 -> scripts/platform/qemu.sh all"
     printf '%s\n' "  all                  -> build all platform targets sequentially with rootfs and all os if applicable"
     printf '%s\n' "  clean                -> clean all platform targets"
@@ -57,6 +58,7 @@ usage() {
     printf '%s\n' "  $0 platform qemu                 # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64          # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64 linux    # build linux with default rootfs"
+    printf '%s\n' "  $0 platform qemu-loongarch64 linux # build LoongArch64 linux with default rootfs"
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
     printf '%s\n' "  $0 os nimbos aarch64"
@@ -110,7 +112,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     script_path="${PLATFORM_DIR}/${target}.sh"
                     run_checked_script "$script_path" "$@"
                     ;;
-                qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64)
+                qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64|qemu-loongarch64)
                     script_path="${PLATFORM_DIR}/qemu.sh"
                     qemu_args=("$@")
                     if [[ "$target" == "qemu" ]]; then
@@ -119,14 +121,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         qemu_cmd="${target#qemu-}"
                     fi
                     export QEMU_ARCH="${qemu_cmd}"
-                    if ! has_rootfs_override "${qemu_args[@]}"; then
-                        qemu_args+=(--rootfs "busybox,alpine,debian")
+                    if [[ "$qemu_cmd" != "all" ]] && ! has_rootfs_override "${qemu_args[@]}"; then
+                        if [[ "$qemu_cmd" == "loongarch64" ]]; then
+                            qemu_args+=(--rootfs "alpine")
+                        else
+                            qemu_args+=(--rootfs "busybox,alpine,debian")
+                        fi
                     fi
                     run_checked_script "$script_path" "$qemu_cmd" "${qemu_args[@]}"
                     ;;
                 all)
                     extra_args=("$@")
-                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
+                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64 qemu-loongarch64; do
                         if [[ ${#extra_args[@]} -eq 0 ]]; then
                             echo "Building: $p all"
                             "$0" platform "$p" all || { echo "[ERROR] $p build failed" >&2; exit 1; }
@@ -137,7 +143,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     done
                     ;;
                 clean)
-                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64; do
+                    for p in phytiumpi roc-rk3568-pc evm3588 tac-e400-plc orangepi-5-plus rdk-s100p bst-a1000 qemu-aarch64 qemu-x86_64 qemu-riscv64 qemu-loongarch64; do
                         echo "Cleaning: $p"
                         "$0" platform "$p" clean || { echo "[ERROR] $p clean failed" >&2; exit 1; }
                     done

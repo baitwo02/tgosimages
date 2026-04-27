@@ -12,7 +12,7 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 BUSYBOX_REPO_URL="${BUSYBOX_REPO_URL:-https://github.com/mirror/busybox.git}"
 BUSYBOX_SRC_DIR="${BUSYBOX_SRC_DIR:-${BUILD_DIR}/busybox}"
 BUSYBOX_PATCH_DIR="${BUSYBOX_PATCH_DIR:-${ROOT_DIR}/patches/busybox}"
-MKFS_ARCHES=("aarch64" "riscv64" "x86_64")
+MKFS_ARCHES=("aarch64" "loongarch64" "riscv64" "x86_64")
 
 # Global variables for parsed arguments
 MKFS_ARCH=""
@@ -28,6 +28,7 @@ mkfs_usage() {
     printf '\n'
     printf '<command>:\n'
     printf '  aarch64                       Build minimal filesystem for aarch64\n'
+    printf '  loongarch64                   Build minimal filesystem for loongarch64\n'
     printf '  riscv64                       Build minimal filesystem for riscv64\n'
     printf '  x86_64                        Build minimal filesystem for x86_64\n'
     printf '  all                           Build minimal filesystem for all supported architectures\n'
@@ -46,7 +47,7 @@ mkfs_usage() {
     printf 'Notes:\n'
     printf '  * If BusyBox is dynamically linked, required shared libraries are copied automatically.\n'
     printf '  * The init script drops to an interactive shell after mounting basic pseudo filesystems.\n'
-    printf '  * The all command currently targets: aarch64, riscv64, x86_64.\n'
+    printf '  * The all command currently targets: aarch64, loongarch64, riscv64, x86_64.\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/rootfs/busybox.sh aarch64\n'
@@ -59,9 +60,11 @@ mkfs_clean_outputs() {
     local output_dir="${MKFS_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
     rm -f \
         "${output_dir}/initramfs-aarch64-busybox.cpio.gz" \
+        "${output_dir}/initramfs-loongarch64-busybox.cpio.gz" \
         "${output_dir}/initramfs-riscv64-busybox.cpio.gz" \
         "${output_dir}/initramfs-x86_64-busybox.cpio.gz" \
         "${output_dir}/rootfs-aarch64-busybox.img" \
+        "${output_dir}/rootfs-loongarch64-busybox.img" \
         "${output_dir}/rootfs-riscv64-busybox.img" \
         "${output_dir}/rootfs-x86_64-busybox.img"
     success "BusyBox rootfs outputs cleaned in ${output_dir}"
@@ -279,7 +282,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             mkfs_usage
             exit 0
             ;;
-        aarch64|riscv64|x86_64)
+        aarch64|loongarch64|riscv64|x86_64)
             mkfs_parse_args "$@"
             MKFS_ARCH="$cmd"
             mkfs

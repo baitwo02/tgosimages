@@ -86,17 +86,19 @@
 - `qemu-aarch64`
 - `qemu-riscv64`
 - `qemu-x86_64`
+- `qemu-loongarch64`
 
 其中：
 
-- `qemu` 会顺序执行 `qemu-aarch64`、`qemu-x86_64`、`qemu-riscv64`
-- `qemu-aarch64`、`qemu-riscv64`、`qemu-x86_64` 底层调用的是 `scripts/platform/qemu.sh`
+- `qemu` 会顺序执行 `qemu-aarch64`、`qemu-x86_64`、`qemu-riscv64`、`qemu-loongarch64`
+- `qemu-aarch64`、`qemu-riscv64`、`qemu-x86_64`、`qemu-loongarch64` 底层调用的是 `scripts/platform/qemu.sh`
 
 `scripts/platform/qemu.sh` 当前支持：
 
 - `aarch64`
 - `riscv64`
 - `x86_64`
+- `loongarch64`
 
 ### Rootfs 目标
 
@@ -197,7 +199,7 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 
 - 同时生成 initramfs 和 ext4 rootfs 镜像
 - 被 `scripts/platform/qemu.sh` 用于 QEMU 的 Linux / ArceOS 流程
-- 当前支持 `aarch64`、`riscv64`、`x86_64`
+- 当前支持 `aarch64`、`loongarch64`、`riscv64`、`x86_64`
 
 ### Alpine
 
@@ -229,6 +231,7 @@ QEMU Linux 的典型文件包括：
 
 - `Image`，用于 `aarch64` / `riscv64`
 - `bzImage`，用于 `x86_64`
+- `vmlinuz.efi`，用于 `loongarch64`
 - BusyBox 产物，如 `busybox-initramfs-<arch>.cpio.gz`、`busybox-rootfs-<arch>.img`
 
 ## QEMU 快速验证
