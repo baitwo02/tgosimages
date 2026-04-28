@@ -46,7 +46,7 @@ usage() {
     printf '\n'
     printf 'OS Targets:\n'
     printf '  linux                             Build the Linux OS\n'
-    printf '  arceos                            Build the ArceOS OS (temporarily disabled for QEMU)\n'
+    printf '  arceos                            Build the ArceOS OS\n'
     printf '  nimbos                            Build the NimbOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
@@ -79,7 +79,7 @@ usage() {
         fi
     else
         printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
-        printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS (temporarily disabled for QEMU)\n'
+        printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
         printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
         printf '  scripts/qemu.sh loongarch64 linux # Build LoongArch64 Linux\n'
         printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
@@ -162,30 +162,25 @@ linux() {
 }
 
 arceos() {
-    # Temporarily disable ArceOS build for qemu. Keep the original logic below
-    # commented so it can be restored quickly later.
-    # case "${ARCH}" in
-    #     aarch64)
-    #         local platform="aarch64-dyn"
-    #         ;;
-    #     riscv64)
-    #         local platform="riscv64-qemu-virt"
-    #         ;;
-    #     x86_64)
-    #         local platform="x86-pc"
-    #         ;;
-    #     *)
-    #         die "Unsupported ArceOS architecture: ${ARCH}"
-    #         ;;
-    # esac
-    #
-    # local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
-    # info "Building ArceOS using common arceos.sh script for platform: $platform -> $arceos_images_dir"
-    #
-    # # Call the arceos.sh script with proper parameters
-    # bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "${arceos_images_dir}" --image-name "arceos-qemu" "$@"
-    #
-    warn "ArceOS build is temporarily disabled for qemu, skipping ${ARCH}"
+    case "${ARCH}" in
+        aarch64)
+            local platform="aarch64-dyn"
+            ;;
+        riscv64)
+            local platform="riscv64-qemu-virt"
+            ;;
+        x86_64)
+            local platform="x86-pc"
+            ;;
+        *)
+            die "Unsupported ArceOS architecture: ${ARCH}"
+            ;;
+    esac
+    
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+    info "Building ArceOS using tgoskits for platform: $platform -> $arceos_images_dir"
+
+    bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "${arceos_images_dir}" --image-name "arceos-qemu" "$@"
 }
 
 nimbos() {
