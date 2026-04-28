@@ -1,7 +1,7 @@
-diff --git a/src/freertos_aarch64_guest/bench_porting_layer_freertos.c b/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
+diff --git a/freertos/src/freertos_aarch64_guest/bench_porting_layer_freertos.c b/freertos/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
 index ede3124..9870922 100644
---- a/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
-+++ b/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
+--- a/freertos/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
++++ b/freertos/src/freertos_aarch64_guest/bench_porting_layer_freertos.c
 @@ -57,7 +57,6 @@ void bench_test_init(void (*test_init_function)(void *))
  	}
  
@@ -10,10 +10,10 @@ index ede3124..9870922 100644
  
  	for (;;) {
  	}
-diff --git a/src/freertos_aarch64_guest/boot.S b/src/freertos_aarch64_guest/boot.S
+diff --git a/freertos/src/freertos_aarch64_guest/boot.S b/freertos/src/freertos_aarch64_guest/boot.S
 index b5eb287..a24e825 100644
---- a/src/freertos_aarch64_guest/boot.S
-+++ b/src/freertos_aarch64_guest/boot.S
+--- a/freertos/src/freertos_aarch64_guest/boot.S
++++ b/freertos/src/freertos_aarch64_guest/boot.S
 @@ -2,9 +2,37 @@
      .globl _boot
      .type _boot, %function
@@ -52,10 +52,10 @@ index b5eb287..a24e825 100644
      strb w21, [x20]
      ldr x0, =_vector_table
      msr VBAR_EL1, x0
-diff --git a/src/freertos_aarch64_guest/fdt.c b/src/freertos_aarch64_guest/fdt.c
+diff --git a/freertos/src/freertos_aarch64_guest/fdt.c b/freertos/src/freertos_aarch64_guest/fdt.c
 index 446151f..394ff8a 100644
---- a/src/freertos_aarch64_guest/fdt.c
-+++ b/src/freertos_aarch64_guest/fdt.c
+--- a/freertos/src/freertos_aarch64_guest/fdt.c
++++ b/freertos/src/freertos_aarch64_guest/fdt.c
 @@ -26,6 +26,30 @@ struct fdt_header {
  
  static const void *boot_fdt_ptr;
@@ -96,3 +96,99 @@ index 446151f..394ff8a 100644
  		return false;
  	}
  
+diff --git a/FreeRTOS-Kernel/portable/GCC/ARM_AARCH64_SRE/port.c b/FreeRTOS-Kernel/portable/GCC/ARM_AARCH64_SRE/port.c
+index ab9290d43..950612403 100644
+--- a/FreeRTOS-Kernel/portable/GCC/ARM_AARCH64_SRE/port.c
++++ b/FreeRTOS-Kernel/portable/GCC/ARM_AARCH64_SRE/port.c
+@@ -174,6 +174,10 @@ uint64_t ullPortYieldRequired = pdFALSE;
+  * if the nesting depth is 0. */
+ uint64_t ullPortInterruptNesting = 0;
+ 
++#if defined( GUEST )
++static uint64_t ullGuestInterruptMaskSet = pdFALSE;
++#endif
++
+ /* Used in the ASM code. */
+ __attribute__( ( used ) ) const uint64_t ullMaxAPIPriorityMask = ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT );
+ 
+@@ -452,7 +456,12 @@ void vPortClearInterruptMask( UBaseType_t uxNewMaskValue )
+ {
+     if( uxNewMaskValue == pdFALSE )
+     {
+-        portCLEAR_INTERRUPT_MASK();
++        #if defined( GUEST )
++            ullGuestInterruptMaskSet = pdFALSE;
++            __asm volatile ( "MSR DAIFCLR, #2" ::: "memory" );
++        #else
++            portCLEAR_INTERRUPT_MASK();
++        #endif
+     }
+ }
+ /*-----------------------------------------------------------*/
+@@ -460,30 +469,49 @@ void vPortClearInterruptMask( UBaseType_t uxNewMaskValue )
+ UBaseType_t uxPortSetInterruptMask( void )
+ {
+     uint32_t ulReturn;
+-    uint64_t ullPMRValue;
+ 
+     /* Interrupt in the CPU must be turned off while the ICCPMR is being
+      * updated. */
+-    portDISABLE_INTERRUPTS();
+-    /* s3_0_c4_c6_0 is ICC_PMR_EL1. */
+-    __asm volatile ( "MRS %0, s3_0_c4_c6_0" : "=r" ( ullPMRValue ) );
++    #if defined( GUEST )
++        __asm volatile ( "MSR DAIFSET, #2" ::: "memory" );
++    #else
++        portDISABLE_INTERRUPTS();
++    #endif
++
++    #if defined( GUEST )
++        ulReturn = ullGuestInterruptMaskSet ? pdTRUE : pdFALSE;
++        ullGuestInterruptMaskSet = pdTRUE;
++    #else
++        uint64_t ullPMRValue;
+ 
+-    if( ullPMRValue == ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) )
+-    {
+-        /* Interrupts were already masked. */
+-        ulReturn = pdTRUE;
+-    }
+-    else
+-    {
+-        ulReturn = pdFALSE;
+         /* s3_0_c4_c6_0 is ICC_PMR_EL1. */
+-        __asm volatile ( "MSR s3_0_c4_c6_0, %0      \n"
+-                         "DSB SY                    \n"
+-                         "ISB SY                    \n"
+-                         ::"r" ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) : "memory" );
++        __asm volatile ( "MRS %0, s3_0_c4_c6_0" : "=r" ( ullPMRValue ) );
++
++        if( ullPMRValue == ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) )
++        {
++            /* Interrupts were already masked. */
++            ulReturn = pdTRUE;
++        }
++        else
++        {
++            ulReturn = pdFALSE;
++        }
++    #endif
++
++    if( ulReturn == pdFALSE )
++    {
++        #if !defined( GUEST )
++            /* s3_0_c4_c6_0 is ICC_PMR_EL1. */
++            __asm volatile ( "MSR s3_0_c4_c6_0, %0      \n"
++                             "DSB SY                    \n"
++                             "ISB SY                    \n"
++                             ::"r" ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) : "memory" );
++        #endif
+     }
+ 
+-    portENABLE_INTERRUPTS();
++    #if !defined( GUEST )
++        portENABLE_INTERRUPTS();
++    #endif
+ 
+     return ulReturn;
+ }

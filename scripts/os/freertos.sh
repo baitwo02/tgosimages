@@ -89,25 +89,34 @@ apply_single_patch() {
 
     local applied=0
     local exclude_args=()
+    local can_use_git_apply=0
     if [[ -n "$exclude_pattern" ]]; then
         exclude_args=(--exclude "$exclude_pattern")
     fi
+    if [[ -d "${src_dir}/.git" ]]; then
+        can_use_git_apply=1
+    fi
 
-    # Try git apply
-    if git apply --check "${exclude_args[@]}" "$patch_file" >/dev/null 2>&1; then
-        if git apply "${exclude_args[@]}" "$patch_file" >>"${LOG_FILE}" 2>&1; then
-            applied=1
+    # Try git apply only when src_dir itself is a git repository. Applying a
+    # combined patch from BUILD_DIR (which contains nested freertos and
+    # FreeRTOS-Kernel repos) can return success without updating the nested
+    # worktrees, so prefer plain patch in that layout.
+    if [[ $can_use_git_apply -eq 1 ]]; then
+        if git apply --check "${exclude_args[@]}" "$patch_file" >/dev/null 2>&1; then
+            if git apply "${exclude_args[@]}" "$patch_file" >>"${LOG_FILE}" 2>&1; then
+                applied=1
+                echo > "$stamp"
+                info "[APPLY] $base (git apply)"
+            fi
+        elif [[ ${#exclude_args[@]} -eq 0 ]] && git apply --reverse --check "$patch_file" >/dev/null 2>&1; then
+            info "[SKIP] $base (already applied)"
             echo > "$stamp"
-            info "[APPLY] $base (git apply)"
+            applied=1
         fi
-    elif [[ ${#exclude_args[@]} -eq 0 ]] && git apply --reverse --check "$patch_file" >/dev/null 2>&1; then
-        info "[SKIP] $base (already applied)"
-        echo > "$stamp"
-        applied=1
     fi
 
     # Try git apply --3way for conflicting patches
-    if [[ $applied -eq 0 ]] && git apply --3way "${exclude_args[@]}" "$patch_file" >>"${LOG_FILE}" 2>&1; then
+    if [[ $applied -eq 0 ]] && [[ $can_use_git_apply -eq 1 ]] && git apply --3way "${exclude_args[@]}" "$patch_file" >>"${LOG_FILE}" 2>&1; then
         applied=1
         echo > "$stamp"
         info "[APPLY] $base (git apply --3way)"
@@ -161,6 +170,20 @@ prepare_target_source() {
         rm -rf .patch_stamps build-* */build
         popd >/dev/null
     fi
+
+    if [[ -d "${FREERTOS_KERNEL_SRC_DIR}/.git" ]]; then
+        info "Restoring FreeRTOS-Kernel source to clean state"
+        pushd "${FREERTOS_KERNEL_SRC_DIR}" >/dev/null
+        git checkout -- . 2>>"${LOG_FILE}" || true
+        git clean -fd 2>>"${LOG_FILE}" || true
+        popd >/dev/null
+    fi
+
+    # Patch stamps are now rooted at BUILD_DIR because the phytiumpi patch
+    # touches both the freertos and FreeRTOS-Kernel trees. Clear them before
+    # each target build so the combined patch is always re-applied after the
+    # source trees are reset.
+    rm -rf "${BUILD_DIR}/.patch_stamps"
 }
 
 freertos_guest_source_matches_doc() {
@@ -514,12 +537,8 @@ phytiumpi() {
 
     prepare_target_source
 
-    if freertos_guest_source_matches_doc "${FREERTOS_SRC_DIR}"; then
-        info "Using existing local FreeRTOS guest source state that already matches the documented phytiumpi setup"
-    else
-        info "Applying patch: rtos-benchmark-phytiumpi.patch"
-        apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$FREERTOS_SRC_DIR"
-    fi
+    info "Applying patch: rtos-benchmark-phytiumpi.patch"
+    apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$BUILD_DIR"
 
     build_cmake \
         "freertos_aarch64_guest" \
@@ -546,12 +565,8 @@ tac_e400_plc() {
 
     prepare_target_source
 
-    if freertos_guest_source_matches_doc "${FREERTOS_SRC_DIR}"; then
-        info "Using existing local FreeRTOS guest source state that already matches the documented phytiumpi setup"
-    else
-        info "Applying patch: rtos-benchmark-phytiumpi.patch"
-        apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$FREERTOS_SRC_DIR"
-    fi
+    info "Applying patch: rtos-benchmark-phytiumpi.patch"
+    apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$BUILD_DIR"
 
     build_cmake \
         "freertos_aarch64_guest" \
