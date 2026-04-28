@@ -9,11 +9,17 @@ BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Repository and directory configuration
-FREERTOS_REPO_URL="https://github.com/zephyrproject-rtos/rtos-benchmark.git"
-FREERTOS_KERNEL_REPO_URL="https://github.com/FreeRTOS/FreeRTOS-Kernel.git"
+FREERTOS_REPO_URL="${FREERTOS_REPO_URL:-https://github.com/arceos-hypervisor/rtos-benchmark.git}"
+FREERTOS_REF="${FREERTOS_REF:-84e312503abb59f562623e769d3e97108bc32c28}"
+FREERTOS_KERNEL_REPO_URL="${FREERTOS_KERNEL_REPO_URL:-https://github.com/FreeRTOS/FreeRTOS-Kernel.git}"
+FREERTOS_KERNEL_REF="${FREERTOS_KERNEL_REF:-2624889925fe5be610245dd0f1bc12ecf162a1a1}"
 FREERTOS_KERNEL_SRC_DIR="${BUILD_DIR}/FreeRTOS-Kernel"
 FREERTOS_PATCH_DIR="${ROOT_DIR}/patches/freertos"
-FREERTOS_CROSS_COMPILE="${FREERTOS_CROSS_COMPILE:-aarch64-linux-gnu-}"
+if [[ -x "/code/rtos/zephyr-sdk-0.16.5-1/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-gcc" ]]; then
+    FREERTOS_CROSS_COMPILE="${FREERTOS_CROSS_COMPILE:-/code/rtos/zephyr-sdk-0.16.5-1/aarch64-zephyr-elf/bin/aarch64-zephyr-elf-}"
+else
+    FREERTOS_CROSS_COMPILE="${FREERTOS_CROSS_COMPILE:-aarch64-linux-gnu-}"
+fi
 
 # Shared source directory (all targets reuse the same clone, patches are re-applied per build)
 FREERTOS_SRC_DIR="${BUILD_DIR}/freertos"
@@ -24,6 +30,8 @@ if [[ -z "$CC_PATH" ]]; then
     die "Cross compiler not found: ${FREERTOS_CROSS_COMPILE}gcc"
 fi
 CROSS_BIN_DIR="$(dirname "$CC_PATH")"
+CROSS_GCC_NAME="$(basename "${FREERTOS_CROSS_COMPILE}gcc")"
+CROSS_OBJCOPY_NAME="$(basename "${FREERTOS_CROSS_COMPILE}objcopy")"
 
 # Output help information
 usage() {
@@ -35,6 +43,7 @@ usage() {
     printf 'Commands:\n'
     printf '  qemu-aarch64                       Build for QEMU (aarch64)\n'
     printf '  phytiumpi                          Build for Phytium Pi\n'
+    printf '  tac-e400-plc                       Build for TAC-E400-PLC\n'
     printf '  orangepi-5-plus                    Build for Orange Pi 5 Plus\n'
     printf '  all                                Build all supported platforms\n'
     printf '  help, -h, --help                   Display this help information\n'
@@ -130,9 +139,13 @@ apply_single_patch() {
 prepare_source() {
     info "Cloning rtos-benchmark source repository $FREERTOS_REPO_URL -> $FREERTOS_SRC_DIR"
     clone_repository "$FREERTOS_REPO_URL" "$FREERTOS_SRC_DIR"
+    info "Checking out rtos-benchmark ref ${FREERTOS_REF}"
+    checkout_ref "$FREERTOS_SRC_DIR" "$FREERTOS_REF"
 
     info "Cloning FreeRTOS-Kernel source repository $FREERTOS_KERNEL_REPO_URL -> $FREERTOS_KERNEL_SRC_DIR"
     clone_repository "$FREERTOS_KERNEL_REPO_URL" "$FREERTOS_KERNEL_SRC_DIR"
+    info "Checking out FreeRTOS-Kernel ref ${FREERTOS_KERNEL_REF}"
+    checkout_ref "$FREERTOS_KERNEL_SRC_DIR" "$FREERTOS_KERNEL_REF"
 }
 
 # Restore shared source to clean state and ensure it's cloned
@@ -148,6 +161,21 @@ prepare_target_source() {
         rm -rf .patch_stamps build-* */build
         popd >/dev/null
     fi
+}
+
+freertos_guest_source_matches_doc() {
+    local src_dir="$1"
+    local boot_s="${src_dir}/src/freertos_aarch64_guest/boot.S"
+    local fdt_c="${src_dir}/src/freertos_aarch64_guest/fdt.c"
+    local bench_c="${src_dir}/src/freertos_aarch64_guest/bench_porting_layer_freertos.c"
+    local linker_ld="${src_dir}/src/freertos_aarch64_guest/linker.ld"
+
+    [[ -f "${boot_s}" && -f "${fdt_c}" && -f "${bench_c}" && -f "${linker_ld}" ]] || return 1
+    rg -q "freertos_enter_el1" "${boot_s}" || return 1
+    rg -q "fdt_pointer_looks_valid" "${fdt_c}" || return 1
+    ! rg -q "scheduler returned unexpectedly" "${bench_c}" || return 1
+    rg -q "ENTRY\\(_boot\\)" "${linker_ld}" || return 1
+    rg -q "ORIGIN = 0x2020000000" "${linker_ld}" || return 1
 }
 
 # ── Freestanding libc support ────────────────────────────────────────────────
@@ -316,8 +344,8 @@ fix_cmake_paths() {
     sed -i \
         -e "s|/code/rtos/FreeRTOS-Kernel|${FREERTOS_KERNEL_SRC_DIR}|g" \
         -e "s|set(AARCH64_GCC_DIR \".*\"|set(AARCH64_GCC_DIR \"${CROSS_BIN_DIR}\"|g" \
-        -e "s|aarch64-zephyr-elf-gcc|${FREERTOS_CROSS_COMPILE}gcc|g" \
-        -e "s|aarch64-zephyr-elf-objcopy|${FREERTOS_CROSS_COMPILE}objcopy|g" \
+        -e "s|aarch64-zephyr-elf-gcc|${CROSS_GCC_NAME}|g" \
+        -e "s|aarch64-zephyr-elf-objcopy|${CROSS_OBJCOPY_NAME}|g" \
         -e "/--specs=nano\.specs/d" \
         -e "/--specs=nosys\.specs/d" \
         -e 's/-nostartfiles/-nostartfiles -nostdlib/' \
@@ -360,7 +388,7 @@ fix_cmake_paths() {
     fi
 }
 
-# ── CMake build (shared by qemu-aarch64 and phytiumpi) ───────────────────────
+# ── CMake build (shared by qemu-aarch64 / phytiumpi / tac-e400-plc) ─────────
 
 build_cmake() {
     local rtos_name="$1"      # e.g. freertos_aarch64_qemu
@@ -392,13 +420,18 @@ build_cmake() {
     popd >/dev/null
 
     local bin_path="${build_dir}/${bin_name}"
+    local elf_path="${build_dir}/app"
     if [[ ! -f "$bin_path" ]]; then
         die "Build output not found: $bin_path"
     fi
+    if [[ ! -f "$elf_path" ]]; then
+        die "Build output not found: $elf_path"
+    fi
 
     mkdir -p "$images_dir"
-    cp -f "$bin_path" "${images_dir}/${out_name}"
-    success "Image saved: ${images_dir}/${out_name}"
+    cp -f "$bin_path" "${images_dir}/${out_name}.bin"
+    cp -f "$elf_path" "${images_dir}/${out_name}.elf"
+    success "Images saved: ${images_dir}/${out_name}.bin ${images_dir}/${out_name}.elf"
 }
 
 parse_image_args() {
@@ -481,8 +514,44 @@ phytiumpi() {
 
     prepare_target_source
 
-    info "Applying patch: rtos-benchmark-phytiumpi.patch"
-    apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$FREERTOS_SRC_DIR"
+    if freertos_guest_source_matches_doc "${FREERTOS_SRC_DIR}"; then
+        info "Using existing local FreeRTOS guest source state that already matches the documented phytiumpi setup"
+    else
+        info "Applying patch: rtos-benchmark-phytiumpi.patch"
+        apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$FREERTOS_SRC_DIR"
+    fi
+
+    build_cmake \
+        "freertos_aarch64_guest" \
+        "src/freertos_aarch64_guest/freertos_aarch64_guest.cmake" \
+        "freertos-aarch64-guest.bin" \
+        "${image_name}" \
+        "${images_dir}"
+}
+
+# ── TAC-E400-PLC ─────────────────────────────────────────────────────────────
+
+tac_e400_plc() {
+    local images_dir="${ROOT_DIR}/IMAGES/tac-e400-plc/freertos"
+    local image_name="tac-e400-plc"
+    parse_image_args "${images_dir}" "${image_name}" images_dir image_name "$@"
+    local args=("${FREERTOS_PARSED_ARGS[@]}")
+
+    if [[ ${#args[@]} -gt 0 && "${args[0]}" == "clean" ]]; then
+        info "Cleaning TAC-E400-PLC FreeRTOS build artifacts"
+        rm -rf "${FREERTOS_SRC_DIR}/build-freertos_aarch64_guest"
+        rm -rf "${images_dir}"
+        return
+    fi
+
+    prepare_target_source
+
+    if freertos_guest_source_matches_doc "${FREERTOS_SRC_DIR}"; then
+        info "Using existing local FreeRTOS guest source state that already matches the documented phytiumpi setup"
+    else
+        info "Applying patch: rtos-benchmark-phytiumpi.patch"
+        apply_single_patch "${FREERTOS_PATCH_DIR}/rtos-benchmark-phytiumpi.patch" "$FREERTOS_SRC_DIR"
+    fi
 
     build_cmake \
         "freertos_aarch64_guest" \
@@ -623,22 +692,27 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         phytiumpi)
             phytiumpi "$@"
             ;;
+        tac-e400-plc)
+            tac_e400_plc "$@"
+            ;;
         orangepi-5-plus)
             orangepi-5-plus "$@"
             ;;
         all)
             qemu_aarch64 "$@"
             phytiumpi "$@"
+            tac_e400_plc "$@"
             orangepi-5-plus "$@"
             ;;
         clean)
             rm -rf "${FREERTOS_SRC_DIR}"
             qemu_aarch64 "clean"
             phytiumpi "clean"
+            tac_e400_plc "clean"
             orangepi-5-plus "clean"
             ;;
         *)
-            die "Unknown command: $cmd (supported: qemu-aarch64, phytiumpi, orangepi-5-plus, all, clean)"
+            die "Unknown command: $cmd (supported: qemu-aarch64, phytiumpi, tac-e400-plc, orangepi-5-plus, all, clean)"
             ;;
     esac
 fi

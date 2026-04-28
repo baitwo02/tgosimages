@@ -27,6 +27,8 @@ usage() {
     printf '  all                               Build all supported OS\n'
     printf '  linux                             Build only the Linux system\n'
     printf '  arceos                            Build only the ArceOS system\n'
+    printf '  zephyr                            Build only the Zephyr guest image\n'
+    printf '  freertos                          Build only the FreeRTOS guest image\n'
     printf '  help, -h, --help                  Display this help information\n'
     printf '  clean                             Clean build output artifacts\n'
     printf '\n'
@@ -88,6 +90,30 @@ arceos() {
     bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name tac-e400-plc "$@"
 }
 
+zephyr() {
+    local zephyr_images_dir="${PLATFORM_IMAGES_DIR}/zephyr"
+
+    if [[ "$@" != *"clean"* ]]; then
+        info "Building Zephyr using common zephyr.sh script"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" tac-e400-plc --images-dir "${zephyr_images_dir}" "$@"
+    else
+        info "Cleaning Zephyr using common zephyr.sh script"
+        bash "${SCRIPT_DIR}/../os/zephyr.sh" tac-e400-plc clean --images-dir "${zephyr_images_dir}"
+    fi
+}
+
+freertos() {
+    local freertos_images_dir="${PLATFORM_IMAGES_DIR}/freertos"
+
+    if [[ "$@" != *"clean"* ]]; then
+        info "Building FreeRTOS using common freertos.sh script"
+        bash "${SCRIPT_DIR}/../os/freertos.sh" tac-e400-plc --images-dir "${freertos_images_dir}" --image-name "tac-e400-plc" "$@"
+    else
+        info "Cleaning FreeRTOS using common freertos.sh script"
+        bash "${SCRIPT_DIR}/../os/freertos.sh" tac-e400-plc clean --images-dir "${freertos_images_dir}" --image-name "tac-e400-plc"
+    fi
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
     shift || true
@@ -102,15 +128,29 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         arceos)
             arceos "$@"
             ;;
+        zephyr)
+            zephyr "$@"
+            ;;
+        freertos)
+            freertos "$@"
+            ;;
         all)
             linux "$@"
 
             arceos "$@"
+
+            zephyr "$@"
+
+            freertos "$@"
             ;;
         clean)
             linux "clean"
 
             arceos "clean"
+
+            zephyr "clean"
+
+            freertos "clean"
             ;;
         *)
             die "Unknown command: $cmd" >&2

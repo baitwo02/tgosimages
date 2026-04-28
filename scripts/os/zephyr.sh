@@ -40,6 +40,7 @@ zephyr_usage() {
     printf 'Commands:\n'
     printf '  qemu-aarch64                  Build Zephyr guest for QEMU aarch64\n'
     printf '  phytiumpi                     Build Zephyr guest for PhytiumPi\n'
+    printf '  tac-e400-plc                  Build Zephyr guest for TAC-E400-PLC\n'
     printf '  orangepi-5-plus               Build Zephyr guest for Orange Pi 5 Plus\n'
     printf '  all                           Build all supported Zephyr guest images\n'
     printf '  clean                         Clean all supported Zephyr guest images\n'
@@ -277,6 +278,12 @@ configure_platform() {
             ZEPHYR_BUILD_SUBDIR="zephyr/phytiumpi"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/phytiumpi/zephyr}"
             ;;
+        tac-e400-plc)
+            ZEPHYR_APP="tests/benchmarks/latency_measure"
+            ZEPHYR_BOARD="phytiumpi_axvisor_guest"
+            ZEPHYR_BUILD_SUBDIR="zephyr/tac-e400-plc"
+            : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/tac-e400-plc/zephyr}"
+            ;;
         orangepi-5-plus)
             ZEPHYR_APP="tests/benchmarks/latency_measure"
             ZEPHYR_BOARD="orangepi_5_plus_rk3588"
@@ -305,17 +312,17 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             zephyr_usage
             exit 0
             ;;
-        qemu-aarch64|phytiumpi|orangepi-5-plus)
+        qemu-aarch64|phytiumpi|tac-e400-plc|orangepi-5-plus)
             ZEPHYR_PLATFORM="${cmd}"
             ;;
         all)
-            for platform in qemu-aarch64 phytiumpi orangepi-5-plus; do
+            for platform in qemu-aarch64 phytiumpi tac-e400-plc orangepi-5-plus; do
                 "$0" "${platform}" "$@" || { echo "[ERROR] ${platform} build failed" >&2; exit 1; }
             done
             exit 0
             ;;
         clean)
-            for platform in qemu-aarch64 phytiumpi orangepi-5-plus; do
+            for platform in qemu-aarch64 phytiumpi tac-e400-plc orangepi-5-plus; do
                 "$0" "${platform}" clean || { echo "[ERROR] ${platform} clean failed" >&2; exit 1; }
             done
             exit 0
