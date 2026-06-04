@@ -182,11 +182,6 @@ pack_images() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    if [[ $# -eq 0 ]]; then
-        pack_usage
-        exit 0
-    fi
-
     pack_parse_args "$@"
 
     IMAGES_DIR="$(normalize_dir_path "${IMAGES_DIR}")"
@@ -202,4 +197,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         info "Starting to package system images under ${IMAGES_DIR} with release-layout archives ..."
     fi
     pack_images
+
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        printf 'RELEASE_DIR=%s\n' "${RELEASE_DIR}" >> "${GITHUB_OUTPUT}"
+    fi
 fi

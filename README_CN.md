@@ -231,7 +231,8 @@ QEMU Linux 的典型文件包括：
 
 - `Image`，用于 `aarch64` / `riscv64`
 - `bzImage`，用于 `x86_64`
-- `vmlinuz.efi`，用于 `loongarch64`
+- `vmlinuz.efi` 与 `vmlinux.elf`，用于 `loongarch64`
+- `linux-qemu` 作为通用 QEMU Linux 入口名；`loongarch64` 还会额外生成 `qemu-loongarch64`，作为 `vmlinux.elf` 的兼容别名
 - BusyBox 产物，如 `busybox-initramfs-<arch>.cpio.gz`、`busybox-rootfs-<arch>.img`
 
 ## QEMU 快速验证
@@ -245,6 +246,11 @@ QEMU Linux 的典型文件包括：
 ```
 
 QEMU 平台构建产物现在统一位于 `IMAGES/qemu-<arch>/` 下。
+对于 LoongArch64，平台包 `qemu-loongarch64.tar.xz` 会同时包含
+`linux/vmlinuz.efi` 与 `linux/vmlinux.elf`；其中 `linux/linux-qemu` 指向 EFI
+内核镜像，`linux/qemu-loongarch64` 作为 `vmlinux.elf` 的兼容副本保留。
+rootfs 独立发布，默认包括 `initramfs-loongarch64-busybox.cpio.gz.tar.xz`、
+`rootfs-loongarch64-busybox.img.tar.xz` 与 `rootfs-loongarch64-alpine.img.tar.xz`。
 
 ## 打包与发布
 
@@ -265,14 +271,14 @@ scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 ./build.sh release github \
   --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
-  --repo arceos-hypervisor/axvisor-guest \
+  --repo rcore-os/tgosimages \
   --tag v0.0.10
 
 # 或直接调用脚本
 scripts/tools/github.sh \
   --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
-  --repo arceos-hypervisor/axvisor-guest \
+  --repo rcore-os/tgosimages \
   --tag v0.0.10
 ```
 

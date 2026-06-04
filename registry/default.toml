@@ -1,14 +1,14 @@
 [[includes]]
-url = "https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/v0.0.20.toml"
+url = "https://raw.githubusercontent.com/rcore-os/tgosimages/refs/heads/main/registry/v0.0.20.toml"
 
 [[includes]]
-url = "https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/v0.0.22.toml"
+url = "https://raw.githubusercontent.com/rcore-os/tgosimages/refs/heads/main/registry/v0.0.22.toml"
 
 [[includes]]
-url = "https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/v0.0.23.toml"
+url = "https://raw.githubusercontent.com/rcore-os/tgosimages/refs/heads/main/registry/v0.0.23.toml"
 
 [[includes]]
-url = "https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/v0.0.24.toml"
+url = "https://raw.githubusercontent.com/rcore-os/tgosimages/refs/heads/main/registry/v0.0.24.toml"
 
 [[includes]]
-url = "https://raw.githubusercontent.com/arceos-hypervisor/axvisor-guest/refs/heads/main/registry/v0.0.25.toml"
+url = "https://raw.githubusercontent.com/rcore-os/tgosimages/refs/heads/main/registry/v0.0.25.toml"

@@ -103,6 +103,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             usage
             exit 0
             ;;
+        phytiumpi|roc-rk3568-pc|evm3588|tac-e400-plc|orangepi-5-plus|rdk-s100p|bst-a1000|qemu|qemu-aarch64|qemu-x86_64|qemu-riscv64|qemu-loongarch64)
+            exec "$0" platform "$cmd" "$@"
+            ;;
         platform)
             target="${1:-}"
             shift || true
@@ -123,7 +126,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     export QEMU_ARCH="${qemu_cmd}"
                     if [[ "$qemu_cmd" != "all" ]] && ! has_rootfs_override "${qemu_args[@]}"; then
                         if [[ "$qemu_cmd" == "loongarch64" ]]; then
-                            qemu_args+=(--rootfs "alpine")
+                            qemu_args+=(--rootfs "busybox,alpine")
                         else
                             qemu_args+=(--rootfs "busybox,alpine,debian")
                         fi

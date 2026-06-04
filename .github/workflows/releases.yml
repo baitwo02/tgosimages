@@ -24,11 +24,12 @@ jobs:
       - name: Build for all platforms
         run: |
           set -e
-          ./build.sh qemu-x86_64
-          ./build.sh qemu-riscv64
-          ./build.sh qemu-aarch64
-          ./build.sh phytiumpi
-          ./build.sh tac-e400-plc
+          ./build.sh platform qemu-x86_64 all
+          ./build.sh platform qemu-riscv64 all
+          ./build.sh platform qemu-aarch64 all
+          ./build.sh platform qemu-loongarch64 linux
+          ./build.sh platform phytiumpi all
+          ./build.sh platform tac-e400-plc all
         
       - name: Prepare release files
         id: release

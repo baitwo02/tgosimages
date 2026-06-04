@@ -10,7 +10,7 @@ START_DIR="$(pwd -P)"
 source "${TOOLS_DIR}/../lib/utils.sh"
 
 GITHUB_TOKEN=""
-REPO="arceos-hypervisor/axvisor-guest"
+REPO="rcore-os/tgosimages"
 TAG="v0.0.10"
 PACK_INPUT_DIR="${ROOT_DIR}/IMAGES"
 ASSET_DIR="${ROOT_DIR}/release"
@@ -229,6 +229,7 @@ registry_os_display_name() {
         alpine) printf 'Alpine\n' ;;
         busybox) printf 'BusyBox\n' ;;
         debian) printf 'Debian\n' ;;
+        bundle) printf 'Guest bundle\n' ;;
         *) printf '%s\n' "${os_name}" ;;
     esac
 }
@@ -247,6 +248,7 @@ registry_target_display_name() {
         qemu-aarch64) printf 'QEMU aarch64 virtualization\n' ;;
         qemu-riscv64) printf 'QEMU riscv64 virtualization\n' ;;
         qemu-x86_64) printf 'QEMU x86_64 virtualization\n' ;;
+        qemu-loongarch64) printf 'QEMU LoongArch64 virtualization\n' ;;
         *) return 1 ;;
     esac
 }
@@ -337,6 +339,34 @@ registry_add_os_entry() {
         "${released_at}"
 }
 
+registry_add_platform_bundle_entry() {
+    local output_file="$1"
+    local asset_file="$2"
+    local asset_name="$3"
+    local stem="$4"
+    local version="$5"
+    local url="$6"
+    local released_at="$7"
+    local target="$8"
+    local arch="$9"
+    local target_display
+
+    target_display="$(registry_target_display_name "${target}")" || {
+        warn "Skipping unsupported registry target for asset: ${asset_name}"
+        return 1
+    }
+
+    registry_emit_entry \
+        "${output_file}" \
+        "${stem}" \
+        "${version}" \
+        "Guest image bundle for ${target_display}" \
+        "$(registry_sha256 "${asset_file}")" \
+        "${arch}" \
+        "${url}" \
+        "${released_at}"
+}
+
 registry_process_asset() {
     local output_file="$1"
     local asset_file="$2"
@@ -370,6 +400,12 @@ registry_process_asset() {
         return 0
     fi
 
+    if [[ "${stem}" =~ ^qemu[-_]([A-Za-z0-9_]+)$ ]]; then
+        arch="${BASH_REMATCH[1]}"
+        registry_add_platform_bundle_entry "${output_file}" "${asset_file}" "${asset_name}" "${stem}" "${version}" "${url}" "${released_at}" "qemu-${arch}" "${arch}"
+        return 0
+    fi
+
     if [[ "${stem}" =~ ^(.+)[-_](arceos|linux|nimbos|zephyr|freertos|rtthread)$ ]]; then
         target="${BASH_REMATCH[1]}"
         os_name="${BASH_REMATCH[2]}"
@@ -398,7 +434,7 @@ github_generate_registry() {
     output_file="${output_dir}/${TAG}.toml"
 
     cat > "${output_file}" <<EOF
-# Guest image list for Axvisor (axvisor-guest ${TAG})
+# Guest image list for TGOS images (${TAG})
 
 EOF
 

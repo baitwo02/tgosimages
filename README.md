@@ -231,7 +231,8 @@ Typical QEMU Linux files:
 
 - `Image` for `aarch64` / `riscv64`
 - `bzImage` for `x86_64`
-- `vmlinuz.efi` for `loongarch64`
+- `vmlinuz.efi` and `vmlinux.elf` for `loongarch64`
+- `linux-qemu` as the generic QEMU Linux entry name; for `loongarch64`, `qemu-loongarch64` is also emitted as a compatibility alias for `vmlinux.elf`
 - BusyBox rootfs artifacts such as `busybox-initramfs-<arch>.cpio.gz` and `busybox-rootfs-<arch>.img`
 
 ## QEMU Validation
@@ -245,6 +246,13 @@ Use `run.sh` for quick local QEMU validation:
 ```
 
 QEMU platform build outputs now live under `IMAGES/qemu-<arch>/`.
+For LoongArch64, the platform archive `qemu-loongarch64.tar.xz` contains both
+`linux/vmlinuz.efi` and `linux/vmlinux.elf`; `linux/linux-qemu` points at the EFI
+kernel image, while `linux/qemu-loongarch64` is kept as a compatibility copy of
+`vmlinux.elf`. Rootfs images are published separately, including
+`initramfs-loongarch64-busybox.cpio.gz.tar.xz`,
+`rootfs-loongarch64-busybox.img.tar.xz`, and
+`rootfs-loongarch64-alpine.img.tar.xz` by default.
 
 ## Packaging and Release
 
@@ -265,14 +273,14 @@ scripts/tools/pack.sh --in_dir IMAGES --out_dir release
 ./build.sh release github \
   --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
-  --repo arceos-hypervisor/axvisor-guest \
+  --repo rcore-os/tgosimages \
   --tag v0.0.10
 
 # Or call the script directly
 scripts/tools/github.sh \
   --pack IMAGES,release \
   --token <GITHUB_TOKEN> \
-  --repo arceos-hypervisor/axvisor-guest \
+  --repo rcore-os/tgosimages \
   --tag v0.0.10
 ```
 
