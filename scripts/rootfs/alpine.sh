@@ -349,6 +349,7 @@ alpine_install_default_packages() {
 
     info "Installing default Alpine packages: ${ALPINE_DEFAULT_PACKAGES[*]}"
     if command -v apk >/dev/null 2>&1; then
+        cp -f /etc/resolv.conf "${rootfs_dir}/etc/resolv.conf"
         apk "${apk_args[@]}"
         return
     fi
@@ -373,6 +374,7 @@ alpine_install_default_packages() {
         "alpine:${ALPINE_REL#v}" \
         sh -lc "
             set -e
+            cp -f /etc/resolv.conf /rootfs/etc/resolv.conf
             apk \
                 --root /rootfs \
                 --arch '${ALPINE_ARCH}' \
@@ -438,11 +440,11 @@ alpine_create_rootfs() {
     tar -xzf "${ALPINE_ARCHIVE}" -C "${rootfs_dir}"
 
     alpine_copy_guest_dir "${rootfs_dir}"
-    alpine_write_overlay_files "${rootfs_dir}"
 
     sed -i "s#https\?://dl-cdn.alpinelinux.org/alpine#${ALPINE_BASE}#g" \
         "${rootfs_dir}/etc/apk/repositories"
     alpine_install_default_packages "${rootfs_dir}"
+    alpine_write_overlay_files "${rootfs_dir}"
 
     if ! command -v debugfs >/dev/null 2>&1; then
         die "debugfs not found. Please install e2fsprogs"
