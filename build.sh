@@ -37,7 +37,6 @@ usage() {
     printf '%s\n' "  zephyr               -> scripts/os/zephyr.sh"
     printf '%s\n' "  freertos             -> scripts/os/freertos.sh"
     printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
-    printf '%s\n' "  nimbos               -> scripts/os/nimbos.sh"
     printf '%s\n' "  all                  -> build all independent OS targets sequentially"
     printf '%s\n' "  clean                -> clean all independent OS targets"
     printf '%s\n' ""
@@ -61,7 +60,6 @@ usage() {
     printf '%s\n' "  $0 platform qemu-loongarch64 linux # build LoongArch64 linux with default rootfs"
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
-    printf '%s\n' "  $0 os nimbos aarch64"
     printf '%s\n' "  $0 os arceos aarch64-dyn --image-name arceos.bin"
     printf '%s\n' "  $0 os all <options>"
     printf '%s\n' "  $0 os clean"
@@ -165,7 +163,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             case "$target" in
                 all)
                     os_args=("$@")
-                    for os_target in arceos zephyr freertos rtthread nimbos; do
+                    for os_target in arceos zephyr freertos rtthread; do
                         if [[ ${#os_args[@]} -eq 0 ]]; then
                             echo "Building OS target: $os_target all"
                             "$0" os "$os_target" all || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
@@ -176,12 +174,12 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     done
                     ;;
                 clean)
-                    for os_target in arceos zephyr freertos rtthread nimbos; do
+                    for os_target in arceos zephyr freertos rtthread; do
                         echo "Cleaning OS target: $os_target"
                         "$0" os "$os_target" clean || { echo "[ERROR] $os_target clean failed" >&2; exit 1; }
                     done
                     ;;
-                arceos|zephyr|freertos|rtthread|nimbos)
+                arceos|zephyr|freertos|rtthread)
                     script_path="${OS_DIR}/${target}.sh"
                     run_checked_script "$script_path" "$@"
                     ;;

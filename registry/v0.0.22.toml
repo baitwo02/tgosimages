@@ -82,15 +82,6 @@ url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0
 released_at = "2026-01-06T03:09:14Z"
 
 [[images]]
-name = "qemu_aarch64_nimbos"
-version = "0.0.22"
-description = "NIMBOS for QEMU aarch64 virtualization"
-sha256 = "77d50bc1b5df282e31ed3780dd2d09691026836144c0ce6f46ef99301f5aaea8"
-arch = "aarch64"
-url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.22/qemu_aarch64_nimbos.tar.gz"
-released_at = "2026-01-06T03:09:15Z"
-
-[[images]]
 name = "qemu_riscv64_arceos"
 version = "0.0.22"
 description = "ArceOS for QEMU riscv64 virtualization"
@@ -109,15 +100,6 @@ url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0
 released_at = "2026-01-06T03:09:52Z"
 
 [[images]]
-name = "qemu_riscv64_nimbos"
-version = "0.0.22"
-description = "NIMBOS for QEMU riscv64 virtualization"
-sha256 = "ce75be7bb5dc6ca1df3a23a055100adbd309da0cc65e0dc669a35f81e369249f"
-arch = "riscv64"
-url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.22/qemu_riscv64_nimbos.tar.gz"
-released_at = "2026-01-06T03:09:53Z"
-
-[[images]]
 name = "qemu_x86_64_arceos"
 version = "0.0.22"
 description = "ArceOS for QEMU x86_64 virtualization"
@@ -134,15 +116,6 @@ sha256 = "8a04e36174dd0b0ea386c261d1fee59d47cfbd2e5f0f2a48c53f99c4deead0a5"
 arch = "x86_64"
 url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.22/qemu_x86_64_linux.tar.gz"
 released_at = "2026-01-06T03:10:13Z"
-
-[[images]]
-name = "qemu_x86_64_nimbos"
-version = "0.0.22"
-description = "NIMBOS for QEMU x86_64 virtualization"
-sha256 = "dddfa6067af453d49f2925fe75514779549041ba78bb390a54aab1c836ed6c63"
-arch = "x86_64"
-url = "https://github.com/arceos-hypervisor/axvisor-guest/releases/download/v0.0.22/qemu_x86_64_nimbos.tar.gz"
-released_at = "2026-01-06T03:10:15Z"
 
 [[images]]
 name = "roc-rk3568-pc_arceos"

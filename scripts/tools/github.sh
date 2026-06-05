@@ -222,7 +222,6 @@ registry_os_display_name() {
     case "${os_name}" in
         arceos) printf 'ArceOS\n' ;;
         linux) printf 'Linux\n' ;;
-        nimbos) printf 'NIMBOS\n' ;;
         zephyr) printf 'Zephyr\n' ;;
         freertos) printf 'FreeRTOS\n' ;;
         rtthread) printf 'RT-Thread\n' ;;
@@ -406,7 +405,7 @@ registry_process_asset() {
         return 0
     fi
 
-    if [[ "${stem}" =~ ^(.+)[-_](arceos|linux|nimbos|zephyr|freertos|rtthread)$ ]]; then
+    if [[ "${stem}" =~ ^(.+)[-_](arceos|linux|zephyr|freertos|rtthread)$ ]]; then
         target="${BASH_REMATCH[1]}"
         os_name="${BASH_REMATCH[2]}"
         case "${target}" in

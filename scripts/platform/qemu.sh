@@ -48,7 +48,6 @@ usage() {
     printf 'OS Targets:\n'
     printf '  linux                             Build the Linux OS\n'
     printf '  arceos                            Build the ArceOS OS\n'
-    printf '  nimbos                            Build the NimbOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
     printf '  all                               Build all OS targets (default)\n'
@@ -81,7 +80,6 @@ usage() {
     else
         printf '  scripts/qemu.sh aarch64 linux     # Build ARM64 Linux\n'
         printf '  scripts/qemu.sh x86_64 arceos     # Build x86_64 ArceOS\n'
-        printf '  scripts/qemu.sh riscv64 nimbos    # Build RISC-V NimbOS\n'
         printf '  scripts/qemu.sh loongarch64 linux # Build LoongArch64 Linux\n'
         printf '  scripts/qemu.sh aarch64 all --rootfs busybox,alpine,debian\n'
         printf '  scripts/qemu.sh riscv64 all       # Build all OS targets for RISC-V\n'
@@ -212,16 +210,6 @@ arceos() {
     info "Building ArceOS using tgoskits for platform: $platform -> $arceos_images_dir"
 
     bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "${arceos_images_dir}" --image-name "arceos-qemu" "$@"
-}
-
-nimbos() {
-    local nimbos_images_dir="${PLATFORM_IMAGES_DIR}/nimbos"
-
-    bash "${SCRIPT_DIR}/../os/nimbos.sh" "$ARCH" --images-dir "${nimbos_images_dir}" --image-name "nimbos-qemu" "$@"
-
-    if [[ "$@" == *"clean"* ]]; then
-        rm -rf "${nimbos_images_dir}" || true
-    fi
 }
 
 zephyr() {
@@ -404,9 +392,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 arceos)
                     arceos "${BUILD_ARGS[@]}"
                     ;;
-                nimbos)
-                    nimbos "${BUILD_ARGS[@]}"
-                    ;;
                 zephyr)
                     zephyr "${BUILD_ARGS[@]}"
                     ;;
@@ -418,9 +403,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     if [[ "${ARCH}" != "loongarch64" ]]; then
                         arceos "${BUILD_ARGS[@]}"
                     fi
-                    if [[ "${ARCH}" != "loongarch64" ]]; then
-                        nimbos "${BUILD_ARGS[@]}"
-                    fi
                     if [[ "${ARCH}" == "aarch64" ]]; then
                         zephyr "${BUILD_ARGS[@]}"
                         freertos "${BUILD_ARGS[@]}"
@@ -431,9 +413,6 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     if [[ "${ARCH}" != "loongarch64" ]]; then
                         arceos "clean"
                     fi
-                    if [[ "${ARCH}" != "loongarch64" ]]; then
-                        nimbos "clean"
-                    fi
                     if [[ "${ARCH}" == "aarch64" ]]; then
                         zephyr "clean"
                         freertos "clean"
@@ -441,7 +420,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     qemu_rootfs_clean_outputs
                     ;;
                 *)
-                    die "Unknown os: ${OS} (supported: linux, arceos, nimbos, zephyr, freertos, all)"
+                    die "Unknown os: ${OS} (supported: linux, arceos, zephyr, freertos, all)"
                     ;;
             esac
             if [[ "${OS}" != "clean" ]]; then

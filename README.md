@@ -21,7 +21,7 @@ The repository is now organized by responsibility instead of placing every scrip
 | `build.sh` | Top-level entry point for OS, rootfs, and release tasks |
 | `run.sh` | Quick QEMU boot helper for generated QEMU Linux images |
 | `scripts/platform/` | Platform entry scripts such as Phytium Pi, QEMU, Orange Pi, etc. |
-| `scripts/os/` | Common OS builders such as ArceOS, Zephyr, FreeRTOS, RT-Thread, NimbOS |
+| `scripts/os/` | Common OS builders such as ArceOS, Zephyr, FreeRTOS, and RT-Thread |
 | `scripts/rootfs/` | Rootfs builders for BusyBox, Alpine, and Debian |
 | `scripts/tools/` | Packaging / release helpers and other utilities |
 | `scripts/lib/` | Shared shell helpers |
@@ -57,7 +57,6 @@ These scripts provide reusable build flows and are called either directly or by 
 | `scripts/os/zephyr.sh` | Common Zephyr builder |
 | `scripts/os/freertos.sh` | Common FreeRTOS builder |
 | `scripts/os/rtthread.sh` | Common RT-Thread builder |
-| `scripts/os/nimbos.sh` | Common NimbOS builder, including its own rootfs image generation |
 
 ### Rootfs Builders
 

@@ -21,7 +21,7 @@
 | `build.sh` | OS、rootfs、release 的统一入口 |
 | `run.sh` | QEMU Linux 镜像的快速启动辅助脚本 |
 | `scripts/platform/` | 各平台入口脚本，如 Phytium Pi、QEMU、Orange Pi 等 |
-| `scripts/os/` | 通用 OS 构建器，如 ArceOS、Zephyr、FreeRTOS、RT-Thread、NimbOS |
+| `scripts/os/` | 通用 OS 构建器，如 ArceOS、Zephyr、FreeRTOS 和 RT-Thread |
 | `scripts/rootfs/` | BusyBox、Alpine、Debian 根文件系统生成脚本 |
 | `scripts/tools/` | 打包、发布及其他辅助工具 |
 | `scripts/lib/` | 共享 shell 工具函数 |
@@ -57,7 +57,6 @@
 | `scripts/os/zephyr.sh` | 通用 Zephyr 构建器 |
 | `scripts/os/freertos.sh` | 通用 FreeRTOS 构建器 |
 | `scripts/os/rtthread.sh` | 通用 RT-Thread 构建器 |
-| `scripts/os/nimbos.sh` | 通用 NimbOS 构建器，并包含自身的 rootfs 生成流程 |
 
 ### Rootfs 生成脚本
 
