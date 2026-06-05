@@ -174,7 +174,14 @@ mkfs_pack_fs() {
     fi
     
     TMP_DIR=$(mktemp -d)
-    cleanup() { rm -rf "$TMP_DIR" "$abs_tmp" "$img_tmp"; }
+    MKFS_CLEANUP_TMP_DIR="$TMP_DIR"
+    MKFS_CLEANUP_INITRAMFS_TMP="$abs_tmp"
+    MKFS_CLEANUP_ROOTFS_TMP="$img_tmp"
+    cleanup() {
+        rm -rf "${MKFS_CLEANUP_TMP_DIR:-}" \
+               "${MKFS_CLEANUP_INITRAMFS_TMP:-}" \
+               "${MKFS_CLEANUP_ROOTFS_TMP:-}"
+    }
     trap cleanup EXIT
     cd "$TMP_DIR"
     echo "Creating minimal ramfs in $TMP_DIR"
@@ -262,6 +269,8 @@ mkfs_pack_fs() {
     mv -f "$img_tmp" "$img_out"
     echo "rootfs.img created: $img_out"
     du -h "$img_out" | awk '{print "Size: "$1}'
+    trap - EXIT
+    cleanup
 }
 
 mkfs() {
