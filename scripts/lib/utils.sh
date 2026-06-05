@@ -145,25 +145,52 @@ clone_repository() {
     fi
 }
 
+clone_repository_full() {
+    local repo_url="$1"
+    local src_dir="$2"
+
+    if [[ -z "$repo_url" || -z "$src_dir" ]]; then
+        echo "[ERROR] clone_repository_full: repo_url and src_dir cannot be empty!" >&2
+        return 1
+    fi
+
+    if [[ -d "${src_dir}/.git" ]]; then
+        echo "[SKIP] repo exists: ${src_dir}" >&2
+    else
+        echo "[CLONE] ${repo_url} -> ${src_dir} (full history)" >&2
+        git clone "${repo_url}" "${src_dir}"
+    fi
+}
+
 checkout_ref() {
     # Usage: checkout_git_ref <repo_path> <ref>
     local repo_path="$1"
     local ref="$2"
+    local fetch_attempt
     if [ ! -d "$repo_path/.git" ]; then
         echo "Error: $repo_path is not a git repository" >&2
         return 1
     fi
     pushd "$repo_path" >/dev/null || return 1
-    # Attempt fetch to ensure tag/commit is available. Most repositories are
-    # cloned with --depth=1, so a pinned commit may not exist locally yet.
+    # Most repositories are cloned with --depth=1. Fetch only the requested ref
+    # first; fetching all tags/branches is expensive and fragile for large repos.
     if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
-        git fetch --quiet --depth=1 origin "$ref" 2>/dev/null || true
+        for fetch_attempt in 1 2 3; do
+            echo "[FETCH] Fetching ref ${ref} (attempt ${fetch_attempt}/3)"
+            if git fetch --quiet --no-tags --depth=1 origin "$ref"; then
+                break
+            fi
+            sleep $((fetch_attempt * 2))
+        done
     fi
-    git fetch --all --tags --quiet
     if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
-        echo "[FETCH] Ref not found in shallow clone, unshallowing..."
-        git fetch --unshallow --quiet 2>/dev/null || true
-        git fetch --all --tags --quiet
+        echo "[FETCH] Ref not found in shallow clone, deepening history..."
+        for fetch_attempt in 1 2 3; do
+            if git fetch --quiet --no-tags --deepen=50000 origin; then
+                break
+            fi
+            sleep $((fetch_attempt * 2))
+        done
     fi
     if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
         echo "Error: Branch, tag, or commit not found: $ref" >&2
@@ -172,8 +199,8 @@ checkout_ref() {
     fi
     # Try checkout; if it fails (e.g. "unable to read tree"), unshallow and retry
     if ! git checkout --quiet --force "$ref" 2>&1; then
-        echo "[FETCH] Checkout failed in shallow clone, unshallowing..."
-        git fetch --unshallow --quiet 2>/dev/null || true
+        echo "[FETCH] Checkout failed in shallow clone, retrying with a deeper history..."
+        git fetch --quiet --no-tags --deepen=50000 origin || true
         git checkout --quiet --force "$ref"
     fi
     git clean -fd --quiet

@@ -424,14 +424,15 @@ alpine_download_archive() {
 
 alpine_create_rootfs() {
     local rootfs_dir
+    local rootfs_img_tmp="${ALPINE_ROOTFS_IMG}.tmp.$$"
     rootfs_dir="$(mktemp -d "${ALPINE_WORK_DIR}/rootfs.XXXXXX")"
-    trap 'alpine_cleanup_rootfs_dir "'"${rootfs_dir}"'"' EXIT
+    trap 'alpine_cleanup_rootfs_dir "'"${rootfs_dir}"'"; rm -f "'"${rootfs_img_tmp}"'"' EXIT
 
     info "Creating Alpine rootfs image ${ALPINE_ROOTFS_IMG} (${ALPINE_IMG_SIZE})"
-    rm -f "${ALPINE_ROOTFS_IMG}"
-    fallocate -v -l "${ALPINE_IMG_SIZE}" "${ALPINE_ROOTFS_IMG}"
-    mkfs.ext4 -v -O ^metadata_csum -F "${ALPINE_ROOTFS_IMG}"
-    fsck.ext4 -v -p -f "${ALPINE_ROOTFS_IMG}"
+    rm -f "${rootfs_img_tmp}"
+    fallocate -v -l "${ALPINE_IMG_SIZE}" "${rootfs_img_tmp}"
+    mkfs.ext4 -v -O ^metadata_csum -F "${rootfs_img_tmp}"
+    fsck.ext4 -v -p -f "${rootfs_img_tmp}"
 
     info "Extracting ${ALPINE_METADATA_FILE} to ${ALPINE_ROOTFS_IMG}..."
     tar -xzf "${ALPINE_ARCHIVE}" -C "${rootfs_dir}"
@@ -452,19 +453,20 @@ alpine_create_rootfs() {
         cd "${rootfs_dir}"
 
         find . -type d | while read -r d; do
-            debugfs -w -R "mkdir ${d#.}" "${ALPINE_ROOTFS_IMG}" >/dev/null 2>&1
+            debugfs -w -R "mkdir ${d#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
         done
 
         find . -type f | while read -r f; do
-            debugfs -w -R "write $f ${f#.}" "${ALPINE_ROOTFS_IMG}" >/dev/null 2>&1
+            debugfs -w -R "write $f ${f#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
         done
 
         find . -type l | while read -r lnk; do
             target=$(readlink "$lnk")
-            debugfs -w -R "symlink ${lnk#.} $target" "${ALPINE_ROOTFS_IMG}" >/dev/null 2>&1
+            debugfs -w -R "symlink ${lnk#.} $target" "${rootfs_img_tmp}" >/dev/null 2>&1
         done
     )
 
+    mv -f "${rootfs_img_tmp}" "${ALPINE_ROOTFS_IMG}"
     trap - EXIT
     alpine_cleanup_rootfs_dir "${rootfs_dir}"
 

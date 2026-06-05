@@ -160,6 +160,10 @@ mkfs_pack_fs() {
     # 0. Prepare working directory
     OUTPUT_DIR="${MKFS_OUT_DIR:-${ROOT_DIR}/IMAGES/rootfs}"
     mkdir -p "$OUTPUT_DIR"
+    local abs_out="$OUTPUT_DIR/initramfs-${MKFS_ARCH}-busybox.cpio.gz"
+    local abs_tmp="${abs_out}.tmp.$$"
+    local img_out="$OUTPUT_DIR/rootfs-${MKFS_ARCH}-busybox.img"
+    local img_tmp="${img_out}.tmp.$$"
     
     # Convert guest directory to absolute path before changing directory
     if [[ -n "$MKFS_GUEST_DIR" ]]; then
@@ -170,7 +174,7 @@ mkfs_pack_fs() {
     fi
     
     TMP_DIR=$(mktemp -d)
-    cleanup() { rm -rf "$TMP_DIR"; }
+    cleanup() { rm -rf "$TMP_DIR" "$abs_tmp" "$img_tmp"; }
     trap cleanup EXIT
     cd "$TMP_DIR"
     echo "Creating minimal ramfs in $TMP_DIR"
@@ -227,35 +231,35 @@ mkfs_pack_fs() {
     [[ -e bin/init ]] || ln -s ../init bin/init
 
     # 5. Pack ramfs
-    local abs_out="$OUTPUT_DIR/initramfs-${MKFS_ARCH}-busybox.cpio.gz"
     echo "Packing ramfs -> $abs_out"
     chmod 755 . || true
-    find . -print0 | sort -z 2>/dev/null | cpio --null -H newc -o 2>/dev/null | gzip -9 > "$abs_out"
+    find . -print0 | sort -z 2>/dev/null | cpio --null -H newc -o 2>/dev/null | gzip -9 > "$abs_tmp"
+    mv -f "$abs_tmp" "$abs_out"
     echo "Minimal ramfs created: $abs_out"
     du -h "$abs_out" | awk '{print "Size: "$1}'
 
     # 6. Pack ext4 rootfs.img
-    local img_out="$OUTPUT_DIR/rootfs-${MKFS_ARCH}-busybox.img"
     local size_mb=32
     echo "Packing ext4 rootfs (debugfs write) -> $img_out"
-    dd if=/dev/zero of="$img_out" bs=1M count=$size_mb status=none
-    mkfs.ext4 -q -F "$img_out"
+    dd if=/dev/zero of="$img_tmp" bs=1M count=$size_mb status=none
+    mkfs.ext4 -q -F "$img_tmp"
     if ! command -v debugfs >/dev/null 2>&1; then
         echo "Error: debugfs not found. Please install: sudo apt install e2fsprogs" >&2
         return 1
     fi
     find . -type d | while read -r d; do
-        debugfs -w -R "mkdir ${d#.}" "$img_out" >/dev/null 2>&1
+        debugfs -w -R "mkdir ${d#.}" "$img_tmp" >/dev/null 2>&1
     done
     # Write regular files
     find . -type f | while read -r f; do
-        debugfs -w -R "write $f ${f#.}" "$img_out" >/dev/null 2>&1
+        debugfs -w -R "write $f ${f#.}" "$img_tmp" >/dev/null 2>&1
     done
     # Write symlinks
     find . -type l | while read -r lnk; do
         target=$(readlink "$lnk")
-        debugfs -w -R "symlink ${lnk#.} $target" "$img_out" >/dev/null 2>&1
+        debugfs -w -R "symlink ${lnk#.} $target" "$img_tmp" >/dev/null 2>&1
     done
+    mv -f "$img_tmp" "$img_out"
     echo "rootfs.img created: $img_out"
     du -h "$img_out" | awk '{print "Size: "$1}'
 }

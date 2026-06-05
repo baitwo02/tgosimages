@@ -232,7 +232,7 @@ Typical QEMU Linux files:
 - `Image` for `aarch64` / `riscv64`
 - `bzImage` for `x86_64`
 - `vmlinuz.efi` and `vmlinux.elf` for `loongarch64`
-- `linux-qemu` as the generic QEMU Linux entry name; for `loongarch64`, `qemu-loongarch64` is also emitted as a compatibility alias for `vmlinux.elf`
+- `linux-qemu` as the generic QEMU Linux entry name; for `loongarch64`, this is the ELF image copied from `vmlinux.elf`
 - BusyBox rootfs artifacts such as `busybox-initramfs-<arch>.cpio.gz` and `busybox-rootfs-<arch>.img`
 
 ## QEMU Validation
@@ -247,9 +247,9 @@ Use `run.sh` for quick local QEMU validation:
 
 QEMU platform build outputs now live under `IMAGES/qemu-<arch>/`.
 For LoongArch64, the platform archive `qemu-loongarch64.tar.xz` contains both
-`linux/vmlinuz.efi` and `linux/vmlinux.elf`; `linux/linux-qemu` points at the EFI
-kernel image, while `linux/qemu-loongarch64` is kept as a compatibility copy of
-`vmlinux.elf`. Rootfs images are published separately, including
+`linux/vmlinuz.efi` and `linux/vmlinux.elf`; `linux/linux-qemu` is the generic
+entry name used by the QEMU platform flow and points at `vmlinux.elf`. Rootfs
+images are published separately, including
 `initramfs-loongarch64-busybox.cpio.gz.tar.xz`,
 `rootfs-loongarch64-busybox.img.tar.xz`, and
 `rootfs-loongarch64-alpine.img.tar.xz` by default.

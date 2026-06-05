@@ -297,6 +297,13 @@ EOF_RESOLV
         "
 
     info "Packing ext4 image ${DEBIAN_ROOTFS_IMG} (${DEBIAN_IMG_SIZE})..."
+    local debian_rootfs_tmp="${DEBIAN_ROOTFS_IMG}.tmp.$$"
+    cleanup_rootfs_tmp() {
+        rm -f "${debian_rootfs_tmp}"
+        cleanup_volume
+    }
+    trap cleanup_rootfs_tmp EXIT
+    rm -f "${debian_rootfs_tmp}"
     docker run --rm --privileged \
         --platform "${DEBIAN_DOCKER_PLATFORM}" \
         -v "${volume_name}:/rootfs:ro" \
@@ -309,16 +316,17 @@ EOF_RESOLV
             apt-get install -y e2fsprogs
 
             cd /output
-            rm -f '$(basename "${DEBIAN_ROOTFS_IMG}")'
-            dd if=/dev/zero of='$(basename "${DEBIAN_ROOTFS_IMG}")' bs=1 count=0 seek='${DEBIAN_IMG_SIZE}' 2>/dev/null
-            mkfs.ext4 -O ^orphan_file,^metadata_csum_seed -F -L starry-rootfs '$(basename "${DEBIAN_ROOTFS_IMG}")'
+            rm -f '$(basename "${debian_rootfs_tmp}")'
+            dd if=/dev/zero of='$(basename "${debian_rootfs_tmp}")' bs=1 count=0 seek='${DEBIAN_IMG_SIZE}' 2>/dev/null
+            mkfs.ext4 -O ^orphan_file,^metadata_csum_seed -F -L starry-rootfs '$(basename "${debian_rootfs_tmp}")'
             mkdir -p /mnt/rootfs
-            mount -o loop '$(basename "${DEBIAN_ROOTFS_IMG}")' /mnt/rootfs
+            mount -o loop '$(basename "${debian_rootfs_tmp}")' /mnt/rootfs
             cp -a /rootfs/. /mnt/rootfs/
             sync
             umount /mnt/rootfs
             rmdir /mnt/rootfs
         "
+    mv -f "${debian_rootfs_tmp}" "${DEBIAN_ROOTFS_IMG}"
 
     trap - EXIT
     cleanup_volume

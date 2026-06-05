@@ -35,10 +35,14 @@ rootfs_prepare_target() {
 rootfs_publish_target() {
     local source_path="$1"
     local target_path="$2"
+    local tmp_path="${target_path}.tmp.$$"
 
     [[ -f "${source_path}" ]] || return 1
-    rootfs_prepare_target "${target_path}"
-    cp -f "${source_path}" "${target_path}"
+    [[ -n "${target_path}" ]] || die "rootfs target is empty"
+    mkdir -p "$(dirname "${target_path}")"
+    rm -f "${tmp_path}"
+    cp -f "${source_path}" "${tmp_path}"
+    mv -f "${tmp_path}" "${target_path}"
 }
 
 _rootfs_detect_fs_type() {

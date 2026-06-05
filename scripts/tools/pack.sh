@@ -109,6 +109,9 @@ pack_release_layout() {
     if [[ -d "${rootfs_path}" ]]; then
         while IFS= read -r child_path; do
             [[ -n "${child_path}" ]] || continue
+            if [[ "$(basename "${child_path}")" == *.tmp.* ]]; then
+                continue
+            fi
             if [[ -f "${child_path}" ]]; then
                 package_stem="$(basename "${child_path}")"
                 pack_path "${child_path}" "${package_stem}"
@@ -124,6 +127,9 @@ pack_release_layout() {
     while IFS= read -r child_path; do
         [[ -n "${child_path}" ]] || continue
         if [[ "${child_path}" == "${rootfs_path}" ]]; then
+            continue
+        fi
+        if [[ "$(basename "${child_path}")" == *.tmp.* ]]; then
             continue
         fi
         package_stem="$(basename "${child_path}")"
@@ -167,6 +173,9 @@ pack_images() {
 
     while IFS= read -r child_path; do
         [[ -n "${child_path}" ]] || continue
+        if [[ "$(basename "${child_path}")" == *.tmp.* ]]; then
+            continue
+        fi
         child_count=$((child_count + 1))
         package_stem="$(basename "${child_path}")"
         pack_path "${child_path}" "${package_stem}"

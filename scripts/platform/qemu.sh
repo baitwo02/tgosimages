@@ -12,7 +12,7 @@ source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
 # Source directories
 LINUX_REPO_URL="https://github.com/torvalds/linux.git"
-LINUX_REF="74fe02ce122a6103f207d29fafc8b3a53de6abaf"
+LINUX_REF="${LINUX_REF:-74fe02ce122a6103f207d29fafc8b3a53de6abaf}"
 LINUX_SRC_DIR="${BUILD_DIR}/qemu_linux"
 LINUX_PATCH_DIR="${ROOT_DIR}/patches/qemu"
 ROOTFS_BUILDERS=()
@@ -95,7 +95,7 @@ linux() {
     local image_outputs=()
 
     info "Cloning ${ARCH} Linux source repository $LINUX_REPO_URL"
-    clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
+    clone_repository_full "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
     info "Checking out ${ARCH} Linux ref ${LINUX_REF}"
     checkout_ref "$LINUX_SRC_DIR" "$LINUX_REF"
 
@@ -166,6 +166,12 @@ linux() {
         # If it's a full build, copy the image and create the root filesystem
         if [[ ${#commands[@]} -eq 0 ]] || [[ "${commands[0]}" == "all" ]]; then
             mkdir -p "${linux_images_dir}"
+            rm -f "${linux_images_dir}/linux-qemu"
+            if [[ "${ARCH}" == "loongarch64" ]]; then
+                rm -f "${linux_images_dir}/vmlinuz.efi" \
+                      "${linux_images_dir}/vmlinux.elf" \
+                      "${linux_images_dir}/qemu-loongarch64"
+            fi
             local i
             for i in "${!image_sources[@]}"; do
                 KIMG_PATH="${LINUX_SRC_DIR}/${image_sources[$i]}"
@@ -174,8 +180,7 @@ linux() {
                 cp -f "${KIMG_PATH}" "${linux_images_dir}/${image_outputs[$i]}"
             done
             if [[ "${ARCH}" == "loongarch64" ]]; then
-                cp -f "${linux_images_dir}/vmlinuz.efi" "${linux_images_dir}/linux-qemu"
-                cp -f "${linux_images_dir}/vmlinux.elf" "${linux_images_dir}/qemu-loongarch64"
+                cp -f "${linux_images_dir}/vmlinux.elf" "${linux_images_dir}/linux-qemu"
             fi
             
         fi
