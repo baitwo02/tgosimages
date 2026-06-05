@@ -150,6 +150,7 @@ checkout_ref() {
     local repo_path="$1"
     local ref="$2"
     local fetch_attempt
+    local target="$ref"
     if [ ! -d "$repo_path/.git" ]; then
         echo "Error: $repo_path is not a git repository" >&2
         return 1
@@ -157,34 +158,46 @@ checkout_ref() {
     pushd "$repo_path" >/dev/null || return 1
     # Most repositories are cloned with --depth=1. Fetch only the requested ref
     # first; fetching all tags/branches is expensive and fragile for large repos.
-    if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
+    # rev-parse can succeed with only a commit object, so check the tree too.
+    if ! git cat-file -e "${ref}^{tree}" >/dev/null 2>&1; then
         for fetch_attempt in 1 2 3; do
             echo "[FETCH] Fetching ref ${ref} (attempt ${fetch_attempt}/3)"
-            if git fetch --quiet --no-tags --depth=1 origin "$ref"; then
+            git fetch --quiet --no-tags --depth=1 origin "$ref" || true
+            if git cat-file -e "${ref}^{tree}" >/dev/null 2>&1; then
+                break
+            fi
+            if git cat-file -e "FETCH_HEAD^{tree}" >/dev/null 2>&1; then
+                target="FETCH_HEAD"
                 break
             fi
             sleep $((fetch_attempt * 2))
         done
     fi
-    if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
+    if ! git cat-file -e "${target}^{tree}" >/dev/null 2>&1; then
         echo "[FETCH] Ref not found in shallow clone, deepening history..."
         for fetch_attempt in 1 2 3; do
-            if git fetch --quiet --no-tags --deepen=50000 origin; then
+            git fetch --quiet --no-tags --deepen=50000 origin || true
+            if git cat-file -e "${ref}^{tree}" >/dev/null 2>&1; then
+                target="$ref"
+                break
+            fi
+            if git cat-file -e "FETCH_HEAD^{tree}" >/dev/null 2>&1; then
+                target="FETCH_HEAD"
                 break
             fi
             sleep $((fetch_attempt * 2))
         done
     fi
-    if ! git rev-parse --verify "$ref" >/dev/null 2>&1; then
+    if ! git cat-file -e "${target}^{tree}" >/dev/null 2>&1; then
         echo "Error: Branch, tag, or commit not found: $ref" >&2
         popd >/dev/null
         return 2
     fi
     # Try checkout; if it fails (e.g. "unable to read tree"), unshallow and retry
-    if ! git checkout --quiet --force "$ref" 2>&1; then
-        echo "[FETCH] Checkout failed in shallow clone, retrying with a deeper history..."
-        git fetch --quiet --no-tags --deepen=50000 origin || true
-        git checkout --quiet --force "$ref"
+    if ! git checkout --quiet --force "$target" 2>&1; then
+        echo "[FETCH] Checkout failed in shallow clone, fetching requested ref again..."
+        git fetch --quiet --no-tags --depth=1 origin "$ref" || true
+        git checkout --quiet --force "$target"
     fi
     git clean -fd --quiet
     echo "Switched to $ref"
