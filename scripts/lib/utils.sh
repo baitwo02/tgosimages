@@ -145,23 +145,6 @@ clone_repository() {
     fi
 }
 
-clone_repository_full() {
-    local repo_url="$1"
-    local src_dir="$2"
-
-    if [[ -z "$repo_url" || -z "$src_dir" ]]; then
-        echo "[ERROR] clone_repository_full: repo_url and src_dir cannot be empty!" >&2
-        return 1
-    fi
-
-    if [[ -d "${src_dir}/.git" ]]; then
-        echo "[SKIP] repo exists: ${src_dir}" >&2
-    else
-        echo "[CLONE] ${repo_url} -> ${src_dir} (full history)" >&2
-        git clone "${repo_url}" "${src_dir}"
-    fi
-}
-
 checkout_ref() {
     # Usage: checkout_git_ref <repo_path> <ref>
     local repo_path="$1"

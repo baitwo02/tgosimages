@@ -95,7 +95,7 @@ linux() {
     local image_outputs=()
 
     info "Cloning ${ARCH} Linux source repository $LINUX_REPO_URL"
-    clone_repository_full "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
+    clone_repository "$LINUX_REPO_URL" "$LINUX_SRC_DIR"
     info "Checking out ${ARCH} Linux ref ${LINUX_REF}"
     checkout_ref "$LINUX_SRC_DIR" "$LINUX_REF"
 
