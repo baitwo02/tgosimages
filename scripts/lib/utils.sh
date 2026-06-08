@@ -33,7 +33,7 @@ script_log_info() {
         root="${ROOT_DIR}/logs"
     fi
 
-    printf '%s %s %s\n' "${category}" "${name}" "${root}"
+    printf '%s|%s|%s\n' "${category}" "${name}" "${root}"
 }
 
 new_log_dir() {
@@ -58,7 +58,7 @@ new_log_dir() {
 
 # Log file
 if [[ -z "${LOG_FILE:-}" && "${LOG_CREATE_DEFAULT_FILE:-1}" == "1" ]]; then
-    read -r _ LOG_NAME LOG_ROOT < <(script_log_info)
+    IFS='|' read -r _ LOG_NAME LOG_ROOT < <(script_log_info)
     mkdir -p "${LOG_ROOT}"
     LOG_FILE="${LOG_ROOT}/${LOG_NAME}-$(date '+%Y%m%d-%H%M%S')-$$.log"
 fi
@@ -123,7 +123,7 @@ run_parallel_functions() {
     local failed_steps=()
     local category
     local script_name
-    read -r category script_name _ < <(script_log_info)
+    IFS='|' read -r category script_name _ < <(script_log_info)
     local log_dir="${PARALLEL_LOG_DIR:-$(new_log_dir "${category}" "${script_name}" "${action}")}"
     local summary_log="${log_dir}/summary.log"
 
@@ -151,6 +151,9 @@ run_parallel_functions() {
     local pids=()
     local pid_steps=()
     local pid_logs=()
+    local pid_status_files=()
+    local pid_start_times=()
+    local now
     for step in "${steps[@]}"; do
         local step_name="$step"
         local step_command=()
@@ -161,6 +164,8 @@ run_parallel_functions() {
             use_common_args=0
         fi
         local step_log="${log_dir}/${step_name}.log"
+        local status_file="${log_dir}/${step_name}.status"
+        rm -f "${status_file}"
         printf '[%s] QUEUE %s: %s\n' "$(date '+%F %T')" "$step_name" "$step_log" | tee -a "$summary_log"
         (
             set +e
@@ -184,6 +189,7 @@ run_parallel_functions() {
                 fi
                 status=$?
                 printf '\n[%s] END %s status=%s\n' "$(date '+%F %T')" "$step_name" "$status"
+                printf '%s\n' "$status" >"${status_file}"
                 exit "$status"
             } >"$step_log" 2>&1
         ) &
@@ -191,22 +197,49 @@ run_parallel_functions() {
         pids+=("$pid")
         pid_steps+=("$step_name")
         pid_logs+=("$step_log")
+        pid_status_files+=("$status_file")
+        pid_start_times+=("$(date '+%s')")
         printf '[%s] STARTED %s: pid=%s\n' "$(date '+%F %T')" "$step_name" "$pid" | tee -a "$summary_log"
     done
 
-    local i
-    for i in "${!pids[@]}"; do
-        pid="${pids[$i]}"
-        step="${pid_steps[$i]}"
-        step_log="${pid_logs[$i]}"
-        if wait "$pid"; then
-            printf '[%s] DONE %s: log=%s\n' "$(date '+%F %T')" "$step" "$step_log" | tee -a "$summary_log"
-        else
-            status=$?
-            failed=1
-            failed_steps+=("$step")
-            printf '[%s] FAILED %s: status=%s log=%s\n' "$(date '+%F %T')" "$step" "$status" "$step_log" | tee -a "$summary_log"
+    local remaining="${#pids[@]}"
+    local heartbeat_interval="${PARALLEL_HEARTBEAT_INTERVAL:-30}"
+    local next_heartbeat=$(( $(date '+%s') + heartbeat_interval ))
+    while [[ "${remaining}" -gt 0 ]]; do
+        local progressed=0
+        for i in "${!pids[@]}"; do
+            [[ -n "${pids[$i]:-}" ]] || continue
+            [[ -f "${pid_status_files[$i]}" ]] || continue
+            pid="${pids[$i]}"
+            step="${pid_steps[$i]}"
+            step_log="${pid_logs[$i]}"
+            status="$(<"${pid_status_files[$i]}")"
+            wait "$pid" 2>/dev/null || true
+            rm -f "${pid_status_files[$i]}"
+            unset 'pids[i]'
+            progressed=1
+            if [[ "${status}" -eq 0 ]]; then
+                printf '[%s] DONE %s: log=%s\n' "$(date '+%F %T')" "$step" "$step_log" | tee -a "$summary_log"
+            else
+                failed=1
+                failed_steps+=("$step")
+                printf '[%s] FAILED %s: status=%s log=%s\n' "$(date '+%F %T')" "$step" "$status" "$step_log" | tee -a "$summary_log"
+            fi
+            remaining=$((remaining - 1))
+        done
+
+        now="$(date '+%s')"
+        if [[ "${remaining}" -gt 0 && "${now}" -ge "${next_heartbeat}" ]]; then
+            local running=()
+            for i in "${!pids[@]}"; do
+                [[ -n "${pids[$i]:-}" ]] || continue
+                running+=("${pid_steps[$i]}:$((now - pid_start_times[$i]))s")
+            done
+            printf '[%s] RUNNING %s: %s\n' "$(date '+%F %T')" "$action" "${running[*]}" | tee -a "$summary_log"
+            next_heartbeat=$((now + heartbeat_interval))
         fi
+
+        [[ "${remaining}" -eq 0 || "${progressed}" -eq 1 ]] || sleep 1
     done
 
     if [[ "${PARALLEL_DEFER_COMPLETION:-0}" != "1" ]]; then
