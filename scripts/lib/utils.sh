@@ -5,19 +5,43 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     exit 1
 fi
 
+UTILS_CALLER_SOURCE="${BASH_SOURCE[1]:-${0:-script}}"
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
+default_script_log_root() {
+    local caller_dir
+    local category
+
+    caller_dir="$(cd -- "$(dirname -- "${UTILS_CALLER_SOURCE}")" >/dev/null 2>&1 && pwd -P)"
+    case "${caller_dir}" in
+        "${ROOT_DIR}/scripts/"*)
+            category="${caller_dir#"${ROOT_DIR}/scripts/"}"
+            category="${category%%/*}"
+            printf '%s\n' "${ROOT_DIR}/logs/${category}"
+            ;;
+        *)
+            printf '%s\n' "${ROOT_DIR}/logs"
+            ;;
+    esac
+}
+
 # Log file
 if [[ -z "${LOG_FILE:-}" ]]; then
-    LOG_ROOT="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    LOG_ROOT="${LOG_DIR:-$(default_script_log_root)}"
     mkdir -p "${LOG_ROOT}"
-    LOG_NAME="$(basename "${0:-script}")"
+    LOG_NAME="$(basename "${UTILS_CALLER_SOURCE}")"
     LOG_NAME="${LOG_NAME%.sh}"
     LOG_FILE="${LOG_ROOT}/${LOG_NAME}-$(date '+%Y%m%d-%H%M%S')-$$.log"
 fi
 export LOG_FILE
+
+if [[ -z "${LOG_STDIO_CAPTURED:-}" && "${LOG_TO_STDERR:-1}" == "1" ]]; then
+    mkdir -p "$(dirname "${LOG_FILE}")"
+    export LOG_STDIO_CAPTURED=1
+    exec > >(tee -a "${LOG_FILE}") 2>&1
+fi
 
 # Logging function
 log() {
@@ -26,7 +50,9 @@ log() {
     if [[ "${LOG_TO_STDERR:-1}" == "1" ]]; then
         printf "[%s] %s\n" "$timestamp" "$*" >&2
     fi
-    echo "[$timestamp] $*" >> "${LOG_FILE}"
+    if [[ -z "${LOG_STDIO_CAPTURED:-}" || "${LOG_TO_STDERR:-1}" != "1" ]]; then
+        echo "[$timestamp] $*" >> "${LOG_FILE}"
+    fi
 }
 
 # Verbose logging (only outputs when VERBOSE=1)
@@ -68,9 +94,9 @@ run_parallel_functions() {
     local status
     local failed=0
     local failed_steps=()
-    local log_root="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    local log_root="${LOG_DIR:-$(default_script_log_root)}"
     local script_name
-    script_name="$(basename "${0:-script}")"
+    script_name="$(basename "${UTILS_CALLER_SOURCE}")"
     script_name="${script_name%.sh}"
     local log_dir="${PARALLEL_LOG_DIR:-${log_root}/${script_name}-${action}-$(date '+%Y%m%d-%H%M%S')-$$}"
     local summary_log="${log_dir}/summary.log"

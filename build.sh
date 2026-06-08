@@ -103,7 +103,7 @@ run_parallel_targets() {
     local status
     local failed=0
     local failed_targets=()
-    local log_root="${LOG_DIR:-${SCRIPT_DIR}/logs}"
+    local log_root="${LOG_DIR:-${SCRIPT_DIR}/logs/${group}}"
     local log_dir="${log_root}/${group}-${action}-$(date '+%Y%m%d-%H%M%S')-$$"
     local summary_log="${log_dir}/summary.log"
 

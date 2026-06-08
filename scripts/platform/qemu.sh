@@ -369,9 +369,9 @@ qemu_build_os_and_rootfs() {
     shift
     local os_steps=("$@")
     local rootfs_builder
-    local log_root="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    local log_root="${LOG_DIR:-$(default_script_log_root)}"
     local script_name
-    script_name="$(basename "${0:-script}")"
+    script_name="$(basename "${UTILS_CALLER_SOURCE}")"
     script_name="${script_name%.sh}"
     local action_log_dir="${log_root}/${script_name}-${action}-${ARCH}-$(date '+%Y%m%d-%H%M%S')-$$"
     local summary_log="${action_log_dir}/summary.log"
