@@ -15,6 +15,7 @@ ALPINE_GUEST_DIR=""
 ALPINE_IMG_SIZE="${ALPINE_IMG_SIZE:-1G}"
 ALPINE_BASE="${ALPINE_BASE:-https://mirrors.tuna.tsinghua.edu.cn/alpine}"
 ALPINE_REL="${ALPINE_REL:-v3.23}"
+ALPINE_DOCKER_DNS="${ALPINE_DOCKER_DNS:-223.5.5.5,114.114.114.114}"
 ALPINE_ARCHES=("aarch64" "loongarch64" "riscv64" "x86_64")
 ALPINE_DEFAULT_PACKAGES=(
     binutils
@@ -63,6 +64,7 @@ alpine_usage() {
     printf '  ALPINE_IMG_SIZE               Output image size\n'
     printf '  ALPINE_BASE                   Alpine mirror base URL\n'
     printf '  ALPINE_REL                    Alpine release\n'
+    printf '  ALPINE_DOCKER_DNS             Comma-separated DNS servers for Docker apk install (default: 223.5.5.5,114.114.114.114; set empty to disable)\n'
     printf '\n'
     printf 'Notes:\n'
     printf '  * Generates rootfs.img only.\n'
@@ -335,6 +337,9 @@ alpine_install_default_packages() {
     local host_uid
     local host_gid
     local docker_platform
+    local docker_dns_servers=()
+    local docker_dns_args=()
+    local dns_server
     local apk_args=(
         --root "${rootfs_dir}"
         --arch "${ALPINE_ARCH}"
@@ -346,6 +351,10 @@ alpine_install_default_packages() {
         add
         "${ALPINE_DEFAULT_PACKAGES[@]}"
     )
+
+    if [[ -n "${ALPINE_DOCKER_DNS}" ]]; then
+        IFS=',' read -r -a docker_dns_servers <<< "${ALPINE_DOCKER_DNS}"
+    fi
 
     info "Installing default Alpine packages: ${ALPINE_DEFAULT_PACKAGES[*]}"
     if command -v apk >/dev/null 2>&1; then
@@ -368,7 +377,13 @@ alpine_install_default_packages() {
         *) docker_platform="" ;;
     esac
 
+    for dns_server in "${docker_dns_servers[@]}"; do
+        [[ -n "${dns_server}" ]] || continue
+        docker_dns_args+=("--dns" "${dns_server}")
+    done
+
     docker run --rm \
+        "${docker_dns_args[@]}" \
         ${docker_platform:+--platform "${docker_platform}"} \
         -v "${rootfs_dir}:/rootfs" \
         "alpine:${ALPINE_REL#v}" \
