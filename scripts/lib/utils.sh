@@ -57,6 +57,118 @@ warn() {
     log "⚠️  $1"
 }
 
+run_parallel_functions() {
+    local action="$1"
+    shift
+    local steps=()
+    local step_names=()
+    local args=()
+    local step
+    local pid
+    local status
+    local failed=0
+    local failed_steps=()
+    local log_root="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    local script_name
+    script_name="$(basename "${0:-script}")"
+    script_name="${script_name%.sh}"
+    local log_dir="${PARALLEL_LOG_DIR:-${log_root}/${script_name}-${action}-$(date '+%Y%m%d-%H%M%S')-$$}"
+    local summary_log="${log_dir}/summary.log"
+
+    while [[ "$#" -gt 0 && "$1" != "--" ]]; do
+        steps+=("$1")
+        if [[ "$1" == *=* ]]; then
+            step_names+=("${1%%=*}")
+        else
+            step_names+=("$1")
+        fi
+        shift
+    done
+    [[ "${1:-}" == "--" ]] || die "Missing run_parallel_functions separator"
+    shift
+    args=("$@")
+
+    mkdir -p "$log_dir"
+    : >"$summary_log"
+
+    printf '[%s] START %s\n' "$(date '+%F %T')" "$action" | tee -a "$summary_log"
+    printf '[%s] Log directory: %s\n' "$(date '+%F %T')" "$log_dir" | tee -a "$summary_log"
+    printf '[%s] Steps: %s\n' "$(date '+%F %T')" "${step_names[*]}" | tee -a "$summary_log"
+    printf '[%s] Arguments: %s\n' "$(date '+%F %T')" "${args[*]:-(none)}" | tee -a "$summary_log"
+
+    local pids=()
+    local pid_steps=()
+    local pid_logs=()
+    for step in "${steps[@]}"; do
+        local step_name="$step"
+        local step_command=()
+        local use_common_args=1
+        if [[ "$step" == *=* ]]; then
+            step_name="${step%%=*}"
+            read -r -a step_command <<< "${step#*=}"
+            use_common_args=0
+        fi
+        local step_log="${log_dir}/${step_name}.log"
+        printf '[%s] QUEUE %s: %s\n' "$(date '+%F %T')" "$step_name" "$step_log" | tee -a "$summary_log"
+        (
+            set +e
+            {
+                printf '[%s] START %s\n' "$(date '+%F %T')" "$step_name"
+                printf 'cwd=%s\n' "$(pwd)"
+                printf 'function='
+                if [[ "${use_common_args}" -eq 1 ]]; then
+                    printf '%q ' "$step" "${args[@]}"
+                else
+                    printf '%q ' "${step_command[@]}"
+                fi
+                printf '\n\n'
+                LOG_FILE="$step_log"
+                LOG_TO_STDERR=0
+                export LOG_FILE LOG_TO_STDERR
+                if [[ "${use_common_args}" -eq 1 ]]; then
+                    "$step" "${args[@]}"
+                else
+                    "${step_command[@]}"
+                fi
+                status=$?
+                printf '\n[%s] END %s status=%s\n' "$(date '+%F %T')" "$step_name" "$status"
+                exit "$status"
+            } >"$step_log" 2>&1
+        ) &
+        pid=$!
+        pids+=("$pid")
+        pid_steps+=("$step_name")
+        pid_logs+=("$step_log")
+        printf '[%s] STARTED %s: pid=%s\n' "$(date '+%F %T')" "$step_name" "$pid" | tee -a "$summary_log"
+    done
+
+    local i
+    for i in "${!pids[@]}"; do
+        pid="${pids[$i]}"
+        step="${pid_steps[$i]}"
+        step_log="${pid_logs[$i]}"
+        if wait "$pid"; then
+            printf '[%s] DONE %s: log=%s\n' "$(date '+%F %T')" "$step" "$step_log" | tee -a "$summary_log"
+        else
+            status=$?
+            failed=1
+            failed_steps+=("$step")
+            printf '[%s] FAILED %s: status=%s log=%s\n' "$(date '+%F %T')" "$step" "$status" "$step_log" | tee -a "$summary_log"
+        fi
+    done
+
+    if [[ "${PARALLEL_DEFER_COMPLETION:-0}" != "1" ]]; then
+        if [[ "$failed" -eq 0 ]]; then
+            printf '[%s] COMPLETE %s: all steps finished successfully\n' "$(date '+%F %T')" "$action" | tee -a "$summary_log"
+        else
+            printf '[%s] COMPLETE %s: failed steps=%s\n' "$(date '+%F %T')" "$action" "${failed_steps[*]}" | tee -a "$summary_log"
+        fi
+        printf '[%s] Summary log: %s\n' "$(date '+%F %T')" "$summary_log" | tee -a "$summary_log"
+    fi
+
+    return "$failed"
+}
+
 apply_patches() {
     local patch_dir="$1"
     local src_dir="$2"

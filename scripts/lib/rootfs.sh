@@ -64,6 +64,46 @@ _rootfs_detect_fs_type() {
     fi
 }
 
+_rootfs_inject_tree_via_cpio_gz() {
+    local image_path="$1"
+    local source_dir="$2"
+    local tmp_dir
+    local tmp_image="${image_path}.tmp.$$"
+    local abs_source
+
+    command -v cpio >/dev/null 2>&1 || return 1
+    command -v gzip >/dev/null 2>&1 || return 1
+    command -v fakeroot >/dev/null 2>&1 || return 1
+
+    abs_source="$(cd "${source_dir}" && pwd -P)"
+    tmp_dir="$(mktemp -d "${BUILD_DIR}/rootfs-cpio.XXXXXX")"
+    rm -f "${tmp_image}"
+
+    fakeroot bash -c '
+        set -euo pipefail
+        work_dir="$1"
+        image_path="$2"
+        source_dir="$3"
+        tmp_image="$4"
+
+        cd "${work_dir}"
+        gzip -dc "${image_path}" | cpio -idmu --no-absolute-filenames >/dev/null 2>&1
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -a "${source_dir}/" .
+        else
+            cp -a "${source_dir}/." .
+        fi
+        find . -print0 | sort -z | cpio --null -H newc -o 2>/dev/null | gzip -9 > "${tmp_image}"
+    ' _ "${tmp_dir}" "${image_path}" "${abs_source}" "${tmp_image}" || {
+        rm -rf "${tmp_dir}" "${tmp_image}"
+        return 1
+    }
+
+    mv -f "${tmp_image}" "${image_path}"
+    rm -rf "${tmp_dir}"
+    return 0
+}
+
 _rootfs_inject_tree_via_debugfs() {
     local image_path="$1"
     local source_dir="$2"
@@ -304,6 +344,19 @@ rootfs_inject_guest_stage() {
 
     if [[ ! -f "${rootfs_target}" ]]; then
         warn "Rootfs target does not exist, skipping /guest injection: ${rootfs_target}"
+        return 0
+    fi
+
+    if [[ "${rootfs_target}" == *.cpio.gz ]]; then
+        info "Injecting guest payload into cpio.gz initramfs: ${rootfs_target}"
+        local stage_dir
+        stage_dir="$(mktemp -d "${BUILD_DIR}/rootfs-inject.XXXXXX")"
+        rootfs_stage_guest_tree "${stage_dir}" "${source_dir}"
+        _rootfs_inject_tree_via_cpio_gz "${rootfs_target}" "${stage_dir}" || {
+            rm -rf "${stage_dir}"
+            die "Failed to inject guest payload into cpio.gz initramfs: ${rootfs_target}"
+        }
+        rm -rf "${stage_dir}"
         return 0
     fi
 

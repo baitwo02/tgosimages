@@ -326,15 +326,14 @@ qemu_has_help_arg() {
     return 1
 }
 
-qemu_rootfs_build_from_platform_dir() {
+qemu_rootfs_inject_platform_dir() {
     local guest_dir="${PLATFORM_IMAGES_DIR}"
     local stage_dir
     local rootfs_builder
-    local rootfs_script
 
     [[ ${#ROOTFS_BUILDERS[@]} -gt 0 ]] || return 0
     if [[ ! -d "${guest_dir}" ]]; then
-        warn "No guest payload was produced for qemu ${ARCH}, skipping rootfs generation"
+        warn "No guest payload was produced for qemu ${ARCH}, skipping rootfs injection"
         return 0
     fi
 
@@ -343,23 +342,60 @@ qemu_rootfs_build_from_platform_dir() {
     rootfs_stage_guest_tree "${stage_dir}" "${guest_dir}"
 
     for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
-        rootfs_script="${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh"
-        [[ -f "${rootfs_script}" ]] || die "Root filesystem script does not exist: ${rootfs_script}"
-
-        info "Creating root filesystem: ${rootfs_script} -> IMAGES/rootfs"
         case "${rootfs_builder}" in
-            busybox|alpine|debian)
-                bash "${rootfs_script}" "${ARCH}" --out_dir "${ROOT_DIR}/IMAGES/rootfs" --guest "${stage_dir}/guest"
+            busybox)
+                rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/initramfs-${ARCH}-busybox.cpio.gz" "${stage_dir}/guest"
+                rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-busybox.img" "${stage_dir}/guest"
+                ;;
+            alpine)
+                rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img" "${stage_dir}/guest"
+                ;;
+            debian)
+                rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-debian.img" "${stage_dir}/guest"
                 ;;
             *)
                 die "Unsupported rootfs builder: ${rootfs_builder} (supported: busybox, alpine, debian)"
                 ;;
         esac
-        success "Root filesystem creation completed"
+        success "Root filesystem injection completed: ${rootfs_builder}"
     done
 
     trap - RETURN
     rm -rf "${stage_dir}"
+}
+
+qemu_build_os_and_rootfs() {
+    local action="$1"
+    shift
+    local os_steps=("$@")
+    local rootfs_builder
+    local log_root="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    local script_name
+    script_name="$(basename "${0:-script}")"
+    script_name="${script_name%.sh}"
+    local action_log_dir="${log_root}/${script_name}-${action}-${ARCH}-$(date '+%Y%m%d-%H%M%S')-$$"
+    local summary_log="${action_log_dir}/summary.log"
+    local parallel_steps=("${os_steps[@]}")
+
+    mkdir -p "${action_log_dir}"
+    LOG_FILE="${action_log_dir}/${script_name}.log"
+    export LOG_FILE
+
+    for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
+        parallel_steps+=("${rootfs_builder}=bash ${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh ${ARCH} --out_dir ${ROOT_DIR}/IMAGES/rootfs")
+    done
+
+    if ! PARALLEL_LOG_DIR="${action_log_dir}" \
+         PARALLEL_DEFER_COMPLETION=1 \
+             run_parallel_functions "${action}-${ARCH}" "${parallel_steps[@]}" -- "${BUILD_ARGS[@]}"; then
+        printf '[%s] COMPLETE %s-%s: parallel build failed\n' "$(date '+%F %T')" "${action}" "${ARCH}" | tee -a "${summary_log}"
+        printf '[%s] Summary log: %s\n' "$(date '+%F %T')" "${summary_log}" | tee -a "${summary_log}"
+        return 1
+    fi
+
+    qemu_rootfs_inject_platform_dir
+    printf '[%s] COMPLETE %s-%s: all steps finished successfully\n' "$(date '+%F %T')" "${action}" "${ARCH}" | tee -a "${summary_log}"
+    printf '[%s] Summary log: %s\n' "$(date '+%F %T')" "${summary_log}" | tee -a "${summary_log}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -387,45 +423,44 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             fi
             case "${OS}" in
                 linux)
-                    linux "${BUILD_ARGS[@]}"
+                    qemu_build_os_and_rootfs "linux" linux
                     ;;
                 arceos)
-                    arceos "${BUILD_ARGS[@]}"
+                    qemu_build_os_and_rootfs "arceos" arceos
                     ;;
                 zephyr)
-                    zephyr "${BUILD_ARGS[@]}"
+                    [[ "${ARCH}" == "aarch64" ]] || die "Zephyr guest build is currently only supported for qemu aarch64"
+                    qemu_build_os_and_rootfs "zephyr" zephyr
                     ;;
                 freertos)
-                    freertos "${BUILD_ARGS[@]}"
+                    [[ "${ARCH}" == "aarch64" ]] || die "FreeRTOS guest build is currently only supported for qemu aarch64"
+                    qemu_build_os_and_rootfs "freertos" freertos
                     ;;
                 all)
-                    linux "${BUILD_ARGS[@]}"
+                    qemu_steps=(linux)
                     if [[ "${ARCH}" != "loongarch64" ]]; then
-                        arceos "${BUILD_ARGS[@]}"
+                        qemu_steps+=(arceos)
                     fi
                     if [[ "${ARCH}" == "aarch64" ]]; then
-                        zephyr "${BUILD_ARGS[@]}"
-                        freertos "${BUILD_ARGS[@]}"
+                        qemu_steps+=(zephyr freertos)
                     fi
+                    qemu_build_os_and_rootfs "all" "${qemu_steps[@]}"
                     ;;
                 clean)
-                    linux "clean"
+                    qemu_steps=(linux)
                     if [[ "${ARCH}" != "loongarch64" ]]; then
-                        arceos "clean"
+                        qemu_steps+=(arceos)
                     fi
                     if [[ "${ARCH}" == "aarch64" ]]; then
-                        zephyr "clean"
-                        freertos "clean"
+                        qemu_steps+=(zephyr freertos)
                     fi
+                    run_parallel_functions "clean-${ARCH}" "${qemu_steps[@]}" -- clean
                     qemu_rootfs_clean_outputs
                     ;;
                 *)
                     die "Unknown os: ${OS} (supported: linux, arceos, zephyr, freertos, all)"
                     ;;
             esac
-            if [[ "${OS}" != "clean" ]]; then
-                qemu_rootfs_build_from_platform_dir
-            fi
             ;;
         all)
             if [[ $# -eq 0 || "${1:-}" == "help" || "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then

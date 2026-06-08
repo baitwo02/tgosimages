@@ -161,18 +161,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             rtthread "$@"
             ;;
         all)
-            linux "$@"
-
-            arceos "$@"
-
-            rtthread "$@"
+            run_parallel_functions "all" linux arceos rtthread -- "$@"
             ;;
         clean)
-            linux "clean"
-
-            arceos "clean"
-
-            rtthread "clean"
+            run_parallel_functions "clean" linux arceos rtthread -- clean
             ;;
         *)
             die "Unknown command: $cmd" >&2

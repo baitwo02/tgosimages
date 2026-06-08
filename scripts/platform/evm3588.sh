@@ -140,14 +140,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             arceos "$@"
             ;;
         all)
-            linux "$@"
-
-            arceos "$@"
+            run_parallel_functions "all" linux arceos -- "$@"
             ;;
         clean)
-            linux "clean"
-
-            arceos "clean"
+            run_parallel_functions "clean" linux arceos -- clean
             ;;
         *)
             die "Unknown command: $cmd" >&2

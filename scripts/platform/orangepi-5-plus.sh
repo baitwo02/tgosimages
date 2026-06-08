@@ -204,22 +204,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             freertos "$@"
             ;;
         all)
-            linux "$@"
-
-            arceos "$@"
-
-            zephyr "$@"
-
-            freertos "$@"
+            run_parallel_functions "all" linux arceos zephyr freertos -- "$@"
             ;;
         clean)
-            linux "clean"
-
-            arceos "clean"
-
-            zephyr "clean"
-
-            freertos "clean"
+            run_parallel_functions "clean" linux arceos zephyr freertos -- clean
             ;;
         *)
             die "Unknown command: $cmd" >&2
