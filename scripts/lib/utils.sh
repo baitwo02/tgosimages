@@ -10,34 +10,57 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-default_script_log_root() {
+script_log_info() {
     local caller_dir
-    local category
+    local category=""
+    local name
+    local root
 
     caller_dir="$(cd -- "$(dirname -- "${UTILS_CALLER_SOURCE}")" >/dev/null 2>&1 && pwd -P)"
-    case "${caller_dir}" in
-        "${ROOT_DIR}/scripts/"*)
-            category="${caller_dir#"${ROOT_DIR}/scripts/"}"
-            category="${category%%/*}"
-            printf '%s\n' "${ROOT_DIR}/logs/${category}"
-            ;;
-        *)
-            printf '%s\n' "${ROOT_DIR}/logs"
-            ;;
-    esac
+    if [[ "${caller_dir}" == "${ROOT_DIR}/scripts/"* ]]; then
+        category="${caller_dir#"${ROOT_DIR}/scripts/"}"
+        category="${category%%/*}"
+    fi
+
+    name="$(basename "${UTILS_CALLER_SOURCE}")"
+    name="${name%.sh}"
+
+    if [[ -n "${LOG_DIR:-}" ]]; then
+        root="${LOG_DIR}"
+    elif [[ -n "${category}" ]]; then
+        root="${ROOT_DIR}/logs/${category}"
+    else
+        root="${ROOT_DIR}/logs"
+    fi
+
+    printf '%s %s %s\n' "${category}" "${name}" "${root}"
+}
+
+new_log_dir() {
+    local category="$1"
+    local name="$2"
+    local action="$3"
+    local log_root
+
+    if [[ -n "${LOG_DIR:-}" ]]; then
+        log_root="${LOG_DIR}"
+    elif [[ -n "${category}" ]]; then
+        log_root="${ROOT_DIR}/logs/${category}"
+    else
+        log_root="${ROOT_DIR}/logs"
+    fi
+    printf '%s/%s-%s-%s-%s\n' "${log_root}" "${name}" "${action}" "$(date '+%Y%m%d-%H%M%S')" "$$"
 }
 
 # Log file
-if [[ -z "${LOG_FILE:-}" ]]; then
-    LOG_ROOT="${LOG_DIR:-$(default_script_log_root)}"
+if [[ -z "${LOG_FILE:-}" && "${LOG_CREATE_DEFAULT_FILE:-1}" == "1" ]]; then
+    read -r _ LOG_NAME LOG_ROOT < <(script_log_info)
     mkdir -p "${LOG_ROOT}"
-    LOG_NAME="$(basename "${UTILS_CALLER_SOURCE}")"
-    LOG_NAME="${LOG_NAME%.sh}"
     LOG_FILE="${LOG_ROOT}/${LOG_NAME}-$(date '+%Y%m%d-%H%M%S')-$$.log"
 fi
 export LOG_FILE
 
-if [[ -z "${LOG_STDIO_CAPTURED:-}" && "${LOG_TO_STDERR:-1}" == "1" ]]; then
+if [[ -n "${LOG_FILE:-}" && "${LOG_CAPTURE_STDIO:-1}" == "1" && -z "${LOG_STDIO_CAPTURED:-}" && "${LOG_TO_STDERR:-1}" == "1" ]]; then
     mkdir -p "$(dirname "${LOG_FILE}")"
     export LOG_STDIO_CAPTURED=1
     exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -46,11 +69,11 @@ fi
 # Logging function
 log() {
     local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    mkdir -p "$(dirname "${LOG_FILE}")"
     if [[ "${LOG_TO_STDERR:-1}" == "1" ]]; then
         printf "[%s] %s\n" "$timestamp" "$*" >&2
     fi
-    if [[ -z "${LOG_STDIO_CAPTURED:-}" || "${LOG_TO_STDERR:-1}" != "1" ]]; then
+    if [[ -n "${LOG_FILE:-}" && (-z "${LOG_STDIO_CAPTURED:-}" || "${LOG_TO_STDERR:-1}" != "1") ]]; then
+        mkdir -p "$(dirname "${LOG_FILE}")"
         echo "[$timestamp] $*" >> "${LOG_FILE}"
     fi
 }
@@ -94,11 +117,10 @@ run_parallel_functions() {
     local status
     local failed=0
     local failed_steps=()
-    local log_root="${LOG_DIR:-$(default_script_log_root)}"
+    local category
     local script_name
-    script_name="$(basename "${UTILS_CALLER_SOURCE}")"
-    script_name="${script_name%.sh}"
-    local log_dir="${PARALLEL_LOG_DIR:-${log_root}/${script_name}-${action}-$(date '+%Y%m%d-%H%M%S')-$$}"
+    read -r category script_name _ < <(script_log_info)
+    local log_dir="${PARALLEL_LOG_DIR:-$(new_log_dir "${category}" "${script_name}" "${action}")}"
     local summary_log="${log_dir}/summary.log"
 
     while [[ "$#" -gt 0 && "$1" != "--" ]]; do

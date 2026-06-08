@@ -8,6 +8,9 @@ OS_DIR="${SCRIPTS_DIR}/os"
 ROOTFS_DIR="${SCRIPTS_DIR}/rootfs"
 TOOLS_DIR="${SCRIPTS_DIR}/tools"
 
+LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
+source "${SCRIPTS_DIR}/lib/utils.sh"
+
 usage() {
     printf '%s\n' "Usage:"
     printf '%s\n' "  $0 platform <target> [os] [options]"
@@ -103,8 +106,8 @@ run_parallel_targets() {
     local status
     local failed=0
     local failed_targets=()
-    local log_root="${LOG_DIR:-${SCRIPT_DIR}/logs/${group}}"
-    local log_dir="${log_root}/${group}-${action}-$(date '+%Y%m%d-%H%M%S')-$$"
+    local log_dir
+    log_dir="$(new_log_dir "${group}" "${group}" "${action}")"
     local summary_log="${log_dir}/summary.log"
 
     while [[ "$#" -gt 0 && "$1" != "--" ]]; do

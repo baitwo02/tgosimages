@@ -5,6 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
+LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
 source "${SCRIPT_DIR}/../lib/utils.sh"
 source "${SCRIPT_DIR}/../lib/rootfs.sh"
 
@@ -369,17 +370,10 @@ qemu_build_os_and_rootfs() {
     shift
     local os_steps=("$@")
     local rootfs_builder
-    local log_root="${LOG_DIR:-$(default_script_log_root)}"
-    local script_name
-    script_name="$(basename "${UTILS_CALLER_SOURCE}")"
-    script_name="${script_name%.sh}"
-    local action_log_dir="${log_root}/${script_name}-${action}-${ARCH}-$(date '+%Y%m%d-%H%M%S')-$$"
+    local action_log_dir
+    action_log_dir="$(new_log_dir "platform" "qemu" "${action}-${ARCH}")"
     local summary_log="${action_log_dir}/summary.log"
     local parallel_steps=("${os_steps[@]}")
-
-    mkdir -p "${action_log_dir}"
-    LOG_FILE="${action_log_dir}/${script_name}.log"
-    export LOG_FILE
 
     for rootfs_builder in "${ROOTFS_BUILDERS[@]}"; do
         parallel_steps+=("${rootfs_builder}=bash ${SCRIPT_DIR}/../rootfs/${rootfs_builder}.sh ${ARCH} --out_dir ${ROOT_DIR}/IMAGES/rootfs")
