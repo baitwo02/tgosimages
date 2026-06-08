@@ -49,7 +49,11 @@ new_log_dir() {
     else
         log_root="${ROOT_DIR}/logs"
     fi
-    printf '%s/%s-%s-%s-%s\n' "${log_root}" "${name}" "${action}" "$(date '+%Y%m%d-%H%M%S')" "$$"
+    if [[ -n "${action}" ]]; then
+        printf '%s/%s-%s-%s-%s\n' "${log_root}" "${name}" "${action}" "$(date '+%Y%m%d-%H%M%S')" "$$"
+    else
+        printf '%s/%s-%s-%s\n' "${log_root}" "${name}" "$(date '+%Y%m%d-%H%M%S')" "$$"
+    fi
 }
 
 # Log file

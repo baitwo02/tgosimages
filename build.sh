@@ -107,7 +107,7 @@ run_parallel_targets() {
     local failed=0
     local failed_targets=()
     local log_dir
-    log_dir="$(new_log_dir "${group}" "${group}" "${action}")"
+    log_dir="$(new_log_dir "${group}" "${action}" "")"
     local summary_log="${log_dir}/summary.log"
 
     while [[ "$#" -gt 0 && "$1" != "--" ]]; do
