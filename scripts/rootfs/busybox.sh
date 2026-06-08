@@ -164,6 +164,7 @@ mkfs_pack_fs() {
     local abs_tmp="${abs_out}.tmp.$$"
     local img_out="$OUTPUT_DIR/rootfs-${MKFS_ARCH}-busybox.img"
     local img_tmp="${img_out}.tmp.$$"
+    local old_pwd
     
     # Convert guest directory to absolute path before changing directory
     if [[ -n "$MKFS_GUEST_DIR" ]]; then
@@ -174,6 +175,7 @@ mkfs_pack_fs() {
     fi
     
     TMP_DIR=$(mktemp -d)
+    old_pwd="$(pwd)"
     MKFS_CLEANUP_TMP_DIR="$TMP_DIR"
     MKFS_CLEANUP_INITRAMFS_TMP="$abs_tmp"
     MKFS_CLEANUP_ROOTFS_TMP="$img_tmp"
@@ -252,6 +254,7 @@ mkfs_pack_fs() {
     mkfs.ext4 -q -F "$img_tmp"
     if ! command -v debugfs >/dev/null 2>&1; then
         echo "Error: debugfs not found. Please install: sudo apt install e2fsprogs" >&2
+        cd "$old_pwd"
         return 1
     fi
     find . -type d | while read -r d; do
@@ -269,6 +272,7 @@ mkfs_pack_fs() {
     mv -f "$img_tmp" "$img_out"
     echo "rootfs.img created: $img_out"
     du -h "$img_out" | awk '{print "Size: "$1}'
+    cd "$old_pwd"
     trap - EXIT
     cleanup
 }
