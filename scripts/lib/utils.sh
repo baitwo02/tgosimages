@@ -10,12 +10,22 @@ ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
 # Log file
-LOG_FILE="${BUILD_DIR}/log.log"  # Default log file
+if [[ -z "${LOG_FILE:-}" ]]; then
+    LOG_ROOT="${LOG_DIR:-${ROOT_DIR}/logs/scripts}"
+    mkdir -p "${LOG_ROOT}"
+    LOG_NAME="$(basename "${0:-script}")"
+    LOG_NAME="${LOG_NAME%.sh}"
+    LOG_FILE="${LOG_ROOT}/${LOG_NAME}-$(date '+%Y%m%d-%H%M%S')-$$.log"
+fi
+export LOG_FILE
 
 # Logging function
 log() {
     local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
-    printf "[%s] %s\n" "$timestamp" "$*" >&2
+    mkdir -p "$(dirname "${LOG_FILE}")"
+    if [[ "${LOG_TO_STDERR:-1}" == "1" ]]; then
+        printf "[%s] %s\n" "$timestamp" "$*" >&2
+    fi
     echo "[$timestamp] $*" >> "${LOG_FILE}"
 }
 

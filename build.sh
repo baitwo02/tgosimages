@@ -37,15 +37,15 @@ usage() {
     printf '%s\n' "  zephyr               -> scripts/os/zephyr.sh"
     printf '%s\n' "  freertos             -> scripts/os/freertos.sh"
     printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
-    printf '%s\n' "  all                  -> build all independent OS targets sequentially"
-    printf '%s\n' "  clean                -> clean all independent OS targets"
+    printf '%s\n' "  all                  -> build all independent OS targets in parallel"
+    printf '%s\n' "  clean                -> clean all independent OS targets in parallel"
     printf '%s\n' ""
     printf '%s\n' "Rootfs Targets:"
     printf '%s\n' "  busybox              -> scripts/rootfs/busybox.sh"
     printf '%s\n' "  alpine               -> scripts/rootfs/alpine.sh"
     printf '%s\n' "  debian               -> scripts/rootfs/debian.sh"
-    printf '%s\n' "  all                  -> build all rootfs targets sequentially"
-    printf '%s\n' "  clean                -> clean all rootfs targets"
+    printf '%s\n' "  all                  -> build all rootfs targets in parallel"
+    printf '%s\n' "  clean                -> clean all rootfs targets in parallel"
     printf '%s\n' ""
     printf '%s\n' "Release:"
     printf '%s\n' "  pack                 -> scripts/tools/pack.sh"
@@ -90,6 +90,90 @@ has_rootfs_override() {
         fi
     done
     return 1
+}
+
+run_parallel_targets() {
+    local group="$1"
+    local action="$2"
+    shift 2
+    local targets=()
+    local target_args=()
+    local target
+    local pid
+    local status
+    local failed=0
+    local failed_targets=()
+    local log_root="${LOG_DIR:-${SCRIPT_DIR}/logs}"
+    local log_dir="${log_root}/${group}-${action}-$(date '+%Y%m%d-%H%M%S')-$$"
+    local summary_log="${log_dir}/summary.log"
+
+    while [[ "$#" -gt 0 && "$1" != "--" ]]; do
+        targets+=("$1")
+        shift
+    done
+    [[ "${1:-}" == "--" ]] || { echo "[ERROR] Missing run_parallel_targets separator" >&2; exit 1; }
+    shift
+    target_args=("$@")
+
+    mkdir -p "$log_dir"
+    : >"$summary_log"
+
+    printf '[%s] START %s %s\n' "$(date '+%F %T')" "$group" "$action" | tee -a "$summary_log"
+    printf '[%s] Log directory: %s\n' "$(date '+%F %T')" "$log_dir" | tee -a "$summary_log"
+    printf '[%s] Targets: %s\n' "$(date '+%F %T')" "${targets[*]}" | tee -a "$summary_log"
+    printf '[%s] Arguments: %s\n' "$(date '+%F %T')" "${target_args[*]:-(none)}" | tee -a "$summary_log"
+
+    local pids=()
+    local pid_targets=()
+    local pid_logs=()
+    for target in "${targets[@]}"; do
+        local target_log="${log_dir}/${target}.log"
+        local command=("$0" "$group" "$target" "${target_args[@]}")
+        printf '[%s] QUEUE %s: %s\n' "$(date '+%F %T')" "$target" "$target_log" | tee -a "$summary_log"
+        (
+            set +e
+            {
+                printf '[%s] START %s %s\n' "$(date '+%F %T')" "$group" "$target"
+                printf 'cwd=%s\n' "$(pwd)"
+                printf 'command='
+                printf '%q ' "${command[@]}"
+                printf '\n\n'
+                LOG_FILE="$target_log" LOG_TO_STDERR=0 "${command[@]}"
+                status=$?
+                printf '\n[%s] END %s %s status=%s\n' "$(date '+%F %T')" "$group" "$target" "$status"
+                exit "$status"
+            } >"$target_log" 2>&1
+        ) &
+        pid=$!
+        pids+=("$pid")
+        pid_targets+=("$target")
+        pid_logs+=("$target_log")
+        printf '[%s] STARTED %s: pid=%s\n' "$(date '+%F %T')" "$target" "$pid" | tee -a "$summary_log"
+    done
+
+    local i
+    for i in "${!pids[@]}"; do
+        pid="${pids[$i]}"
+        target="${pid_targets[$i]}"
+        target_log="${pid_logs[$i]}"
+        if wait "$pid"; then
+            printf '[%s] DONE %s: log=%s\n' "$(date '+%F %T')" "$target" "$target_log" | tee -a "$summary_log"
+        else
+            status=$?
+            failed=1
+            failed_targets+=("$target")
+            printf '[%s] FAILED %s: status=%s log=%s\n' "$(date '+%F %T')" "$target" "$status" "$target_log" | tee -a "$summary_log"
+        fi
+    done
+
+    if [[ "$failed" -eq 0 ]]; then
+        printf '[%s] COMPLETE %s %s: all targets finished successfully\n' "$(date '+%F %T')" "$group" "$action" | tee -a "$summary_log"
+    else
+        printf '[%s] COMPLETE %s %s: failed targets=%s\n' "$(date '+%F %T')" "$group" "$action" "${failed_targets[*]}" | tee -a "$summary_log"
+    fi
+    printf '[%s] Summary log: %s\n' "$(date '+%F %T')" "$summary_log" | tee -a "$summary_log"
+
+    return "$failed"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -163,21 +247,13 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             case "$target" in
                 all)
                     os_args=("$@")
-                    for os_target in arceos zephyr freertos rtthread; do
-                        if [[ ${#os_args[@]} -eq 0 ]]; then
-                            echo "Building OS target: $os_target all"
-                            "$0" os "$os_target" all || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
-                        else
-                            echo "Building OS target: $os_target ${os_args[*]}"
-                            "$0" os "$os_target" "${os_args[@]}" || { echo "[ERROR] $os_target build failed" >&2; exit 1; }
-                        fi
-                    done
+                    if [[ ${#os_args[@]} -eq 0 ]]; then
+                        os_args=("all")
+                    fi
+                    run_parallel_targets "os" "all" arceos zephyr freertos rtthread -- "${os_args[@]}" || exit 1
                     ;;
                 clean)
-                    for os_target in arceos zephyr freertos rtthread; do
-                        echo "Cleaning OS target: $os_target"
-                        "$0" os "$os_target" clean || { echo "[ERROR] $os_target clean failed" >&2; exit 1; }
-                    done
+                    run_parallel_targets "os" "clean" arceos zephyr freertos rtthread -- clean || exit 1
                     ;;
                 arceos|zephyr|freertos|rtthread)
                     script_path="${OS_DIR}/${target}.sh"
@@ -200,17 +276,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     if [[ ${#rootfs_args[@]} -eq 0 ]]; then
                         rootfs_args=("all")
                     fi
-                    for rootfs_target in busybox alpine debian; do
-                        echo "Running rootfs target: $rootfs_target ${rootfs_args[*]}"
-                        "$0" rootfs "$rootfs_target" "${rootfs_args[@]}" || { echo "[ERROR] $rootfs_target build failed" >&2; exit 1; }
-                    done
+                    run_parallel_targets "rootfs" "all" busybox alpine debian -- "${rootfs_args[@]}" || exit 1
                     ;;
                 clean)
                     rootfs_args=("$@")
-                    for rootfs_target in busybox alpine debian; do
-                        echo "Cleaning rootfs target: $rootfs_target ${rootfs_args[*]}"
-                        "$0" rootfs "$rootfs_target" clean "${rootfs_args[@]}" || { echo "[ERROR] $rootfs_target clean failed" >&2; exit 1; }
-                    done
+                    run_parallel_targets "rootfs" "clean" busybox alpine debian -- clean "${rootfs_args[@]}" || exit 1
                     ;;
                 busybox|alpine|debian)
                     script_path="${ROOTFS_DIR}/${target}.sh"
