@@ -87,12 +87,8 @@ EOF
             ./build.sh BOARD=orangepi5plus BRANCH=current BUILD_OPT=image RELEASE=jammy BUILD_MINIMAL=yes BUILD_DESKTOP=no KERNEL_CONFIGURE=no
             
             info "Copying build artifacts: $LINUX_SRC_DIR/* -> $linux_images_dir/*"
-            mkdir -p "$linux_images_dir"
-            rsync -av --ignore-missing-args "$LINUX_SRC_DIR/kernel/orange-pi-6.1-rk35xx/arch/arm64/boot/Image" \
-            "$LINUX_SRC_DIR/kernel/orange-pi-6.1-rk35xx/arch/arm64/boot/dts/rockchip/rk3588-orangepi-5-plus.dtb" \
-            "$linux_images_dir/"
-            mv "$linux_images_dir/Image" "$linux_images_dir/orangepi-5-plus"
-            mv "$linux_images_dir/rk3588-orangepi-5-plus.dtb" "$linux_images_dir/orangepi-5-plus.dtb"
+            copy_required "$LINUX_SRC_DIR/kernel/orange-pi-6.1-rk35xx/arch/arm64/boot/Image" "$linux_images_dir/orangepi-5-plus"
+            copy_required "$LINUX_SRC_DIR/kernel/orange-pi-6.1-rk35xx/arch/arm64/boot/dts/rockchip/rk3588-orangepi-5-plus.dtb" "$linux_images_dir/orangepi-5-plus.dtb"
 
             # Apply chosen node overlay to the DTB
             local chosen_overlay_dts="${LINUX_PATCH_DIR}/orangepi-5-plus-chosen-overlay.dts"

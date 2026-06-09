@@ -61,23 +61,31 @@ linux() {
         pushd "$LINUX_SRC_DIR" >/dev/null
         if [[ "$@" != *"clean"* ]]; then
             info "Configuring build: make phytiumpi_desktop_defconfig"
-            make phytiumpi_desktop_defconfig
+            make phytiumpi_desktop_defconfig || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
 
             info "Starting compilation: make $@"
-            make $@
+            make "$@" || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
             
             info "Copying build artifacts: $LINUX_SRC_DIR/output/images -> $linux_images_dir"
-            mkdir -p "$linux_images_dir"
-            rsync -av --ignore-missing-args "$LINUX_SRC_DIR/output/images/fip-all.bin" \
-            "$LINUX_SRC_DIR/output/images/fitImage" \
-            "$LINUX_SRC_DIR/output/images/kernel.its" \
-            "$LINUX_SRC_DIR/output/images/Image" \
-            "$LINUX_SRC_DIR/output/images/phytiumpi_firefly.dtb" \
-            "$LINUX_SRC_DIR/output/images/sdcard.img" \
-            "$LINUX_SRC_DIR/output/images/rootfs.ext2" \
-            "$linux_images_dir/"
+            copy_required "$LINUX_SRC_DIR/output/images/fip-all.bin" "$linux_images_dir/fip-all.bin"
+            copy_required "$LINUX_SRC_DIR/output/images/fitImage" "$linux_images_dir/fitImage"
+            copy_required "$LINUX_SRC_DIR/output/images/kernel.its" "$linux_images_dir/kernel.its"
+            copy_required "$LINUX_SRC_DIR/output/images/Image" "$linux_images_dir/Image"
+            copy_required "$LINUX_SRC_DIR/output/images/phytiumpi_firefly.dtb" "$linux_images_dir/phytiumpi_firefly.dtb"
+            copy_required "$LINUX_SRC_DIR/output/images/sdcard.img" "$linux_images_dir/sdcard.img"
+            copy_required "$LINUX_SRC_DIR/output/images/rootfs.ext2" "$linux_images_dir/rootfs.ext2"
             [[ -f "$linux_images_dir/phytiumpi_firefly.dtb" ]] && mv "$linux_images_dir/phytiumpi_firefly.dtb" "$linux_images_dir/phytiumpi.dtb"
-            [[ -f "$LINUX_SRC_DIR/output/images/Image.gz" ]] && gzip -dc "$LINUX_SRC_DIR/output/images/Image.gz" > "$linux_images_dir/phytiumpi"
+            if [[ -f "$LINUX_SRC_DIR/output/images/Image.gz" ]]; then
+                gzip -dc "$LINUX_SRC_DIR/output/images/Image.gz" > "$linux_images_dir/phytiumpi"
+            fi
             mkdir -p "$PLATFORM_ROOTFS_DIR"
             [[ -f "$linux_images_dir/sdcard.img" ]] && cp -f "$linux_images_dir/sdcard.img" "$PLATFORM_ROOTFS_DIR/phytiumpi.img"
             [[ -f "$linux_images_dir/rootfs.ext2" ]] && cp -f "$linux_images_dir/rootfs.ext2" "$PLATFORM_ROOTFS_DIR/phytiumpi.rootfs.ext2"

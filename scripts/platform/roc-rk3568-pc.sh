@@ -73,7 +73,8 @@ linux() {
             scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${linux_images_dir}/"
             scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${linux_images_dir}/"
             scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${linux_images_dir}/roc-rk3568-pc.img"
+            mkdir -p "${PLATFORM_ROOTFS_DIR}"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img"
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             # If the REMOTE_DIR doesn't exist locally, fall back to running commands in place (assume local repo available at REMOTE_DIR)
@@ -86,14 +87,13 @@ linux() {
             fi
 
             info "Copying build artifacts: -> $linux_images_dir"
-            mkdir -p "${linux_images_dir}"
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${linux_images_dir}/roc-rk3568-pc.dtb" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/roc-rk3568-pc" 2>/dev/null || true
-            cp "${REMOTE_DIR}/u-boot/uboot.img" "${linux_images_dir}/roc-rk3568-pc_uboot.img" 2>/dev/null || true
-            cp "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img" 2>/dev/null || true
+            copy_required "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/boot.img" "${linux_images_dir}/boot.img"
+            copy_required "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/parameter.txt" "${linux_images_dir}/parameter.txt"
+            copy_required "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/MiniLoaderAll.bin" "${linux_images_dir}/MiniLoaderAll.bin"
+            copy_required "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/../kernel/rk3568-firefly-roc-pc-se.dtb" "${linux_images_dir}/roc-rk3568-pc.dtb"
+            copy_required "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/roc-rk3568-pc"
+            copy_required "${REMOTE_DIR}/u-boot/uboot.img" "${linux_images_dir}/roc-rk3568-pc_uboot.img"
+            copy_required "${REMOTE_DIR}/${REMOTE_IMAGES_DIR}/rootfs.img" "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img"
             chmod a+rw "${PLATFORM_ROOTFS_DIR}/roc-rk3568-pc.img" 2>/dev/null || true
 
         fi

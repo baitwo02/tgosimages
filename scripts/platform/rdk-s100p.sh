@@ -134,11 +134,11 @@ linux() {
             info "Copying build artifacts: -> $linux_images_dir"
             mkdir -p "${linux_images_dir}"
             # Copy kernel image
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p" || true
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p"
             # Copy built kernel dtb needed for release
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/" || true
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/"
             # Copy uboot.img
-            scp "${REMOTE_HOST}:${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/" || true
+            scp "${REMOTE_HOST}:${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/"
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             if [[ -d "$REMOTE_DIR" ]]; then
@@ -161,13 +161,12 @@ linux() {
 
             # Copy kernel and uboot artifacts
             info "Copying build artifacts: -> $linux_images_dir"
-            mkdir -p "${linux_images_dir}"
             # Copy kernel image
-            cp "${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p" 2>/dev/null || true
+            copy_required "${REMOTE_DIR}/out/build/kernel/arch/arm64/boot/Image" "${linux_images_dir}/rdk-s100p"
             # Copy built kernel dtb needed for release
-            cp "${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/" 2>/dev/null || true
+            copy_required "${REMOTE_DIR}/${KERNEL_DTB_REL}" "${linux_images_dir}/$(basename "${KERNEL_DTB_REL}")"
             # Copy uboot.img
-            cp "${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/" 2>/dev/null || true
+            copy_required "${BOOTLOADER_DIR}/out/target/product/img_packages/uboot.img" "${linux_images_dir}/uboot.img"
         fi
     else
         if $is_remote; then

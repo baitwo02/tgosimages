@@ -142,18 +142,34 @@ linux() {
     if [[ "$@" != *"clean"* ]]; then
         if [[ ${#commands[@]} -eq 0 ]] || [[ "${commands[0]}" == "all" ]]; then
             info "Configuring Linux: make ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} ${defconfig}"
-            make ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${defconfig}"
+            make ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${defconfig}" || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
         fi
         
         if [[ (${#commands[@]} -eq 0 || "${commands[0]}" == "all") && ${#image_targets[@]} -gt 0 ]]; then
             info "Building Linux image targets: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} ${image_targets[*]}"
-            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${image_targets[@]}"
+            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${image_targets[@]}" || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
         elif [[ ${#commands[@]} -eq 0 ]]; then
             info "Building Linux: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile}"
-            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}"
+            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
         else
             info "Building Linux: make -j$(nproc) ARCH=${linux_arch} CROSS_COMPILE=${cross_compile} ${commands[*]}"
-            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${commands[@]}"
+            make -j"$(nproc)" ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" "${commands[@]}" || {
+                local status=$?
+                popd >/dev/null
+                return "$status"
+            }
         fi
         
         popd >/dev/null

@@ -72,7 +72,8 @@ linux() {
             scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/parameter.txt" "${linux_images_dir}/"
             scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/evm3588"
             scp "${REMOTE_HOST}:${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${linux_images_dir}/evm3588.dtb"
-            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img" 2>/dev/null || true
+            mkdir -p "${PLATFORM_ROOTFS_DIR}"
+            scp "${REMOTE_HOST}:${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img" 2>/dev/null || warn "Optional rootfs image not found: ${REMOTE_DIR}/rockdev/rootfs.img"
         else
             info "Detected REMOTE_HOST ($REMOTE_HOST) is the current machine; building locally in ${REMOTE_DIR}"
             if [[ -d "$REMOTE_DIR" ]]; then
@@ -83,13 +84,12 @@ linux() {
             fi
 
             info "Copying build artifacts: -> $linux_images_dir"
-            mkdir -p "${linux_images_dir}"
-            cp "${REMOTE_DIR}/rockdev/boot.img" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/rockdev/parameter.txt" "${linux_images_dir}/" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/evm3588" 2>/dev/null || true
-            cp "${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${linux_images_dir}/evm3588.dtb" 2>/dev/null || true
-            cp "${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img" 2>/dev/null || true
+            copy_required "${REMOTE_DIR}/rockdev/boot.img" "${linux_images_dir}/boot.img"
+            copy_required "${REMOTE_DIR}/rockdev/MiniLoaderAll.bin" "${linux_images_dir}/MiniLoaderAll.bin"
+            copy_required "${REMOTE_DIR}/rockdev/parameter.txt" "${linux_images_dir}/parameter.txt"
+            copy_required "${REMOTE_DIR}/kernel/arch/arm64/boot/Image" "${linux_images_dir}/evm3588"
+            copy_required "${REMOTE_DIR}/kernel/arch/arm64/boot/dts/rockchip/evm3588.dtb" "${linux_images_dir}/evm3588.dtb"
+            copy_optional "${REMOTE_DIR}/rockdev/rootfs.img" "${PLATFORM_ROOTFS_DIR}/evm3588.img"
         fi
     else
         if $is_remote; then

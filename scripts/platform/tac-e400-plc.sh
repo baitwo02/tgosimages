@@ -63,15 +63,14 @@ linux() {
             cp "$LINUX_SRC_DIR/.config" .config
 
             info "Starting compilation: make -j$(nproc) $@"
-            make -j$(nproc) $@ 2>&1
+            make -j"$(nproc)" "$@" 2>&1
 
             info "Copying build artifacts -> $linux_images_dir"
-            mkdir -p "$linux_images_dir"
-            cp "$LINUX_SRC_DIR/EDGE_KERNEL/arch/arm64/boot/Image" "$linux_images_dir/tac-e400-plc"
-            cp "$LINUX_SRC_DIR/EDGE_KERNEL/arch/arm64/boot/dts/phytium/e2000q-hanwei-board.dtb" "$linux_images_dir/tac-e400-plc.dtb"
+            copy_required "$LINUX_SRC_DIR/EDGE_KERNEL/arch/arm64/boot/Image" "$linux_images_dir/tac-e400-plc"
+            copy_required "$LINUX_SRC_DIR/EDGE_KERNEL/arch/arm64/boot/dts/phytium/e2000q-hanwei-board.dtb" "$linux_images_dir/tac-e400-plc.dtb"
         else
             info "Cleaning: make -j$(nproc) clean"
-            make -j$(nproc) clean 2>&1
+            make -j"$(nproc)" clean 2>&1
             info "Removing ${linux_images_dir}/*"
             rm "${linux_images_dir}"/* || true
         fi

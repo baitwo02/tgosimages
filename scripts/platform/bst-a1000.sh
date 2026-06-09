@@ -62,16 +62,15 @@ linux() {
             make CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 O=build_bst bsta1000b_release_defconfig
 
             info "Starting compilation: make CROSS_COMPILE=aarch64-linux-gnu-  ARCH=arm64 O=build_bst -j$(nproc) $@"
-            make CROSS_COMPILE=aarch64-linux-gnu-  ARCH=arm64 O=build_bst -j$(nproc) $@ 2>&1
+            make CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 O=build_bst -j"$(nproc)" "$@" 2>&1
 
             info "Copying build artifacts -> $linux_images_dir"
-            mkdir -p "$linux_images_dir"
-            cp "$LINUX_SRC_DIR/kernel/build_bst/arch/arm64/boot/Image" "$linux_images_dir/"
-            cp "$LINUX_SRC_DIR/bst_dt/bsta1000b-fada.dtb" "$linux_images_dir/"
-            cp "$LINUX_SRC_DIR/bst_dt/bsta1000b-fadb.dtb" "$linux_images_dir/"
+            copy_required "$LINUX_SRC_DIR/kernel/build_bst/arch/arm64/boot/Image" "$linux_images_dir/Image"
+            copy_required "$LINUX_SRC_DIR/bst_dt/bsta1000b-fada.dtb" "$linux_images_dir/bsta1000b-fada.dtb"
+            copy_required "$LINUX_SRC_DIR/bst_dt/bsta1000b-fadb.dtb" "$linux_images_dir/bsta1000b-fadb.dtb"
         else
             info "Cleaning: make -j$(nproc) clean"
-            make -j$(nproc) clean 2>&1
+            make -j"$(nproc)" clean 2>&1
             info "Removing ${linux_images_dir}/*"
             rm "${linux_images_dir}"/* || true
         fi

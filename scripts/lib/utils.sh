@@ -110,6 +110,25 @@ warn() {
     log "⚠️  $1"
 }
 
+copy_required() {
+    local src="$1"
+    local dst="$2"
+    [[ -e "$src" ]] || die "Required artifact not found: $src"
+    mkdir -p "$(dirname "$dst")"
+    cp -f "$src" "$dst"
+}
+
+copy_optional() {
+    local src="$1"
+    local dst="$2"
+    if [[ -e "$src" ]]; then
+        mkdir -p "$(dirname "$dst")"
+        cp -f "$src" "$dst"
+    else
+        warn "Optional artifact not found: $src"
+    fi
+}
+
 run_parallel_functions() {
     local action="$1"
     shift
@@ -183,9 +202,9 @@ run_parallel_functions() {
                 LOG_TO_STDERR=0
                 export LOG_FILE LOG_TO_STDERR
                 if [[ "${use_common_args}" -eq 1 ]]; then
-                    "$step" "${args[@]}"
+                    ( set -e; "$step" "${args[@]}" )
                 else
-                    "${step_command[@]}"
+                    ( set -e; "${step_command[@]}" )
                 fi
                 status=$?
                 printf '\n[%s] END %s status=%s\n' "$(date '+%F %T')" "$step_name" "$status"
