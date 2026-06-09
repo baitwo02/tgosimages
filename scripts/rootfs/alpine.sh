@@ -270,6 +270,43 @@ alpine_write_overlay_files() {
 nameserver 10.0.2.3
 EOF
 
+    if [[ "${ALPINE_ARCH}" == "loongarch64" ]]; then
+        mkdir -p "${rootfs_dir}/etc/init.d" \
+            "${rootfs_dir}/dev" \
+            "${rootfs_dir}/proc" \
+            "${rootfs_dir}/sys"
+
+        cat > "${rootfs_dir}/etc/inittab" <<'EOF'
+# /etc/inittab - BusyBox init for TGOS Alpine rootfs
+::sysinit:/etc/init.d/rcS
+ttyS0::respawn:/bin/sh
+ttyAMA0::respawn:/bin/sh
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+EOF
+
+        cat > "${rootfs_dir}/etc/init.d/rcS" <<'EOF'
+#!/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+mkdir -p /proc /sys /dev /dev/pts /tmp /run
+mount -t proc proc /proc >/dev/null 2>&1 || true
+mount -t sysfs sysfs /sys >/dev/null 2>&1 || true
+mount -t devtmpfs devtmpfs /dev >/dev/null 2>&1 || true
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts >/dev/null 2>&1 || true
+
+hostname -F /etc/hostname >/dev/null 2>&1 || true
+EOF
+        chmod +x "${rootfs_dir}/etc/init.d/rcS"
+
+        ln -sf /bin/busybox "${rootfs_dir}/sbin/init"
+        mknod "${rootfs_dir}/dev/console" c 5 1 2>/dev/null || true
+        mknod "${rootfs_dir}/dev/null" c 1 3 2>/dev/null || true
+        mknod "${rootfs_dir}/dev/ttyS0" c 4 64 2>/dev/null || true
+        mknod "${rootfs_dir}/dev/ttyAMA0" c 204 64 2>/dev/null || true
+    fi
+
     cat > "${rootfs_dir}/etc/X11/xorg.conf" <<'EOF'
 Section "Device"
     Identifier "MyFramebuffer"
