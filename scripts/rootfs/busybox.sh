@@ -249,6 +249,9 @@ mkfs_pack_fs() {
 
     # 6. Pack ext4 rootfs.img
     local size_mb=32
+    if [[ "${MKFS_ARCH}" == "loongarch64" ]]; then
+        size_mb=96
+    fi
     echo "Packing ext4 rootfs (debugfs write) -> $img_out"
     dd if=/dev/zero of="$img_tmp" bs=1M count=$size_mb status=none
     mkfs.ext4 -q -F "$img_tmp"
