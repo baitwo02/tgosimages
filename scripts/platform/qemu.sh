@@ -5,10 +5,6 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
-source "${SCRIPT_DIR}/../lib/utils.sh"
-source "${SCRIPT_DIR}/../lib/rootfs.sh"
-
 # Repository URLs
 
 # Source directories
@@ -393,6 +389,9 @@ qemu_build_os_and_rootfs() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
+    source "${SCRIPT_DIR}/../lib/utils.sh"
+    source "${SCRIPT_DIR}/../lib/rootfs.sh"
     cmd="${1:-}"
     shift 1 || true
     case "${cmd}" in

@@ -6,9 +6,6 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 BUILD_DIR="$(cd "${ROOT_DIR}" && mkdir -p "build" && cd "build" && pwd -P)"
 
-source "${SCRIPT_DIR}/../lib/utils.sh"
-source "${SCRIPT_DIR}/../lib/rootfs.sh"
-
 # Repository and directory configuration
 LINUX_REPO_URL="https://gitee.com/phytium_embedded/phytium-pi-os.git"
 LINUX_REF="2841c3d939f32c8ac1ca57e3f4d2a8c5ed6ebd63"
@@ -144,6 +141,11 @@ freertos() {
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
+    if [[ "${cmd}" =~ ^(all|clean)$ ]]; then
+        LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
+    fi
+    source "${SCRIPT_DIR}/../lib/utils.sh"
+    source "${SCRIPT_DIR}/../lib/rootfs.sh"
     shift || true
     case "$cmd" in
         ""|-h|--help|help)
