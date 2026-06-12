@@ -42,7 +42,7 @@ Security Note:
 
 DEFAULT_PORT = 8000
 DEFAULT_BIND = '0.0.0.0'
-DEFAULT_SERVE_DIR = Path(os.environ.get('SERVE_DIR', 'IMAGES'))
+DEFAULT_SERVE_DIR = Path(os.environ.get('SERVE_DIR', 'release'))
 DEFAULT_LOG = DEFAULT_SERVE_DIR / '.images_http.log'
 SUBCOMMANDS = ("start", "stop", "status", "restart", "help")
 
@@ -59,7 +59,7 @@ def _add_common_arguments(parser: argparse.ArgumentParser):
     """Attach arguments shared by operational subcommands."""
     parser.add_argument('-p','--port', type=int, default=None, help=f'Listen port (default {DEFAULT_PORT} if omitted)')
     parser.add_argument('-b','--bind', default=DEFAULT_BIND, help=f'Bind address (default {DEFAULT_BIND} - all interfaces)')
-    parser.add_argument('--dir', default=str(DEFAULT_SERVE_DIR), help='Directory to serve (from DEFAULT_SERVE_DIR env or IMAGES)')
+    parser.add_argument('--dir', default=str(DEFAULT_SERVE_DIR), help='Directory to serve (from SERVE_DIR env or release)')
     parser.add_argument('--log-file', default=str(DEFAULT_LOG), help='Log file path')
     parser.add_argument('--no-color', action='store_true', help='Disable colored output')
     parser.add_argument('--timeout', type=float, default=3.0, help='Health check timeout seconds')
@@ -72,7 +72,7 @@ def parse_args(argv=None):
       - Dedicated 'help' subcommand (mirrors many CLI tools) for consistency
       - Shared argument set extracted to _add_common_arguments() for reuse
     """
-    short_desc = "Background HTTP server manager for the IMAGES directory"
+    short_desc = "Background HTTP server manager for the release directory"
 
     class FullHelpAction(argparse.Action):  # prints extended help and exits
         def __call__(self, parser, namespace, values, option_string=None):

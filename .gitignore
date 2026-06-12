@@ -5,6 +5,7 @@
 **/tmp/
 **/guest/
 **/root/
+**/__pycache__
 
 /target
 .axconfig.toml
