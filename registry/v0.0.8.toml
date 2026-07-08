@@ -64,6 +64,15 @@ url = "https://github.com/rcore-os/tgosimages/releases/download/v0.0.8/qemu-risc
 released_at = "2026-07-03T01:24:06Z"
 
 [[images]]
+name = "qemu-x86_64"
+version = "0.0.8"
+description = "Guest image bundle for QEMU x86_64 virtualization"
+sha256 = "64434d91166bf70ebfab42481d935c68640301fd031d0836d2bdec3f82bb2e20"
+arch = "x86_64"
+url = "https://github.com/rcore-os/tgosimages/releases/download/v0.0.8/qemu-x86_64.tar.xz"
+released_at = "2026-07-03T01:24:16Z"
+
+[[images]]
 name = "rootfs-aarch64-alpine.img"
 version = "0.0.8"
 description = "Alpine rootfs image for aarch64"
