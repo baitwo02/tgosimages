@@ -128,11 +128,14 @@ _rootfs_inject_tree_via_debugfs() {
 
     while IFS= read -r rel_path; do
         target_path="/${rel_path#./}"
+        local file_mode
+        file_mode="$(stat -c '%a' "${rel_path}")"
         debugfs -w -R "rm ${target_path}" "${image_path}" >/dev/null 2>&1 || true
         debugfs -w -R "write ${abs_source}/${rel_path#./} ${target_path}" "${image_path}" >/dev/null || {
             popd >/dev/null
             return 1
         }
+        debugfs -w -R "sif ${target_path} mode 0100${file_mode}" "${image_path}" >/dev/null 2>&1 || true
     done < <(find . -type f | sort)
 
     while IFS= read -r rel_path; do
@@ -384,4 +387,55 @@ rootfs_inject_guest_stage() {
         die "Failed to inject guest payload into disk image: ${rootfs_target}"
     }
     rm -rf "${stage_dir}"
+}
+
+rootfs_inject_overlay_stage() {
+    local rootfs_target="$1"
+    local source_dir="$2"
+    local fs_type=""
+
+    [[ -d "${source_dir}" ]] || {
+        warn "Overlay source directory not found, skipping rootfs injection: ${source_dir}"
+        return 0
+    }
+
+    if [[ -z "${rootfs_target}" ]]; then
+        warn "No rootfs target found, skipping overlay injection"
+        return 0
+    fi
+
+    if [[ -d "${rootfs_target}" ]]; then
+        info "Injecting overlay into rootfs directory: ${rootfs_target}"
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -a "${source_dir}/" "${rootfs_target}/"
+        else
+            cp -a "${source_dir}/." "${rootfs_target}/"
+        fi
+        return 0
+    fi
+
+    if [[ ! -f "${rootfs_target}" ]]; then
+        warn "Rootfs target does not exist, skipping overlay injection: ${rootfs_target}"
+        return 0
+    fi
+
+    if [[ "${rootfs_target}" == *.cpio.gz ]]; then
+        info "Injecting overlay into cpio.gz initramfs: ${rootfs_target}"
+        _rootfs_inject_tree_via_cpio_gz "${rootfs_target}" "${source_dir}" || \
+            die "Failed to inject overlay into cpio.gz initramfs: ${rootfs_target}"
+        return 0
+    fi
+
+    fs_type="$(_rootfs_detect_fs_type "${rootfs_target}")"
+    if [[ "${fs_type}" =~ ^ext[234]$ ]]; then
+        info "Injecting overlay into ext filesystem image: ${rootfs_target}"
+        _rootfs_inject_tree_via_debugfs "${rootfs_target}" "${source_dir}" || \
+            die "Failed to inject overlay into ext filesystem image: ${rootfs_target}"
+        return 0
+    fi
+
+    info "Attempting to inject overlay into disk image: ${rootfs_target}"
+    _rootfs_inject_tree_via_partition_extract "${rootfs_target}" "${source_dir}" \
+        || _rootfs_inject_tree_via_loop_mount "${rootfs_target}" "${source_dir}" || \
+            die "Failed to inject overlay into disk image: ${rootfs_target}"
 }
