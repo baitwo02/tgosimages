@@ -128,14 +128,11 @@ _rootfs_inject_tree_via_debugfs() {
 
     while IFS= read -r rel_path; do
         target_path="/${rel_path#./}"
-        local file_mode
-        file_mode="$(stat -c '%a' "${rel_path}")"
         debugfs -w -R "rm ${target_path}" "${image_path}" >/dev/null 2>&1 || true
         debugfs -w -R "write ${abs_source}/${rel_path#./} ${target_path}" "${image_path}" >/dev/null || {
             popd >/dev/null
             return 1
         }
-        debugfs -w -R "sif ${target_path} mode 0100${file_mode}" "${image_path}" >/dev/null 2>&1 || true
     done < <(find . -type f | sort)
 
     while IFS= read -r rel_path; do

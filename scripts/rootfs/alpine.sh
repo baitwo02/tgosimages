@@ -27,7 +27,6 @@ ALPINE_LTP_LDFLAGS="${ALPINE_LTP_LDFLAGS:-}"
 ALPINE_LTP_FILTER_OUT_DIRS="${ALPINE_LTP_FILTER_OUT_DIRS:-fmtmsg timer_create}"
 ALPINE_LTP_DOCKER_IMAGE="${ALPINE_LTP_DOCKER_IMAGE:-}"
 ALPINE_LTP_DOCKER_INSTALL_PACKAGES="${ALPINE_LTP_DOCKER_INSTALL_PACKAGES:-0}"
-ALPINE_LTP="${ALPINE_LTP:-1}"
 ALPINE_LTP_BUILD_PACKAGES=(
     build-base
     linux-headers
@@ -193,7 +192,6 @@ alpine_usage() {
     printf '  ALPINE_LTP_FILTER_OUT_DIRS    LTP syscall directories skipped for Alpine/musl builds\n'
     printf '  ALPINE_LTP_DOCKER_IMAGE       Docker image used to build LTP (default: <prefix>-<target-arch>-ltp:<release>)\n'
     printf '  ALPINE_LTP_DOCKER_INSTALL_PACKAGES Install LTP build packages in container, 1 or 0 (default: 0)\n'
-    printf '  ALPINE_LTP                    Install LTP syscall tests, 1 or 0 (default: 1)\n'
     printf '\n'
     printf 'Notes:\n'
     printf '  * Generates rootfs.img only.\n'
@@ -449,11 +447,6 @@ alpine_install_ltp_syscalls() {
     local ltp_docker_image="${ALPINE_LTP_DOCKER_IMAGE:-$(alpine_ltp_docker_image_for_arch "${ALPINE_ARCH}")}"
     local ltp_runtest_filter_pattern=""
     local filter_dir
-
-    if [[ "${ALPINE_LTP}" != "1" ]]; then
-        info "Skipping LTP syscall tests because ALPINE_LTP=${ALPINE_LTP}"
-        return 0
-    fi
 
     ltp_src_dir="${ltp_src_dir:-$(alpine_ltp_prepare_source)}"
 
@@ -764,10 +757,8 @@ alpine_download_archive() {
 alpine_create_rootfs() {
     local rootfs_dir
     local rootfs_img_tmp="${ALPINE_ROOTFS_IMG}.tmp.$$"
-    local mount_dir
     rootfs_dir="$(mktemp -d "${ALPINE_WORK_DIR}/rootfs.XXXXXX")"
-    mount_dir="$(mktemp -d "${ALPINE_WORK_DIR}/mnt.XXXXXX")"
-    trap 'mountpoint -q "'"${mount_dir}"'" && umount "'"${mount_dir}"'" || true; alpine_cleanup_rootfs_dir "'"${rootfs_dir}"'"; rm -rf "'"${mount_dir}"'"; rm -f "'"${rootfs_img_tmp}"'"' EXIT
+    trap 'alpine_cleanup_rootfs_dir "'"${rootfs_dir}"'"; rm -f "'"${rootfs_img_tmp}"'"' EXIT
 
     info "Creating Alpine rootfs image ${ALPINE_ROOTFS_IMG} (${ALPINE_IMG_SIZE})"
     rm -f "${rootfs_img_tmp}"
@@ -790,36 +781,27 @@ alpine_create_rootfs() {
         die "debugfs not found. Please install e2fsprogs"
     fi
 
-    if [[ "$(id -u)" == "0" ]] && mount -o loop "${rootfs_img_tmp}" "${mount_dir}" >/dev/null 2>&1; then
-        info "Writing Alpine rootfs into ext4 image via loop mount..."
-        cp -a "${rootfs_dir}/." "${mount_dir}/"
-        sync
-        umount "${mount_dir}"
-    else
-        warn "Loop mount is unavailable, falling back to slower debugfs rootfs writer"
-        info "Writing Alpine rootfs into ext4 image via debugfs..."
-        (
-            cd "${rootfs_dir}"
+    info "Writing Alpine rootfs into ext4 image via debugfs..."
+    (
+        cd "${rootfs_dir}"
 
-            find . -type d | while read -r d; do
-                debugfs -w -R "mkdir ${d#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
-            done
+        find . -type d | while read -r d; do
+            debugfs -w -R "mkdir ${d#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
+        done
 
-            find . -type f | while read -r f; do
-                debugfs -w -R "write $f ${f#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
-            done
+        find . -type f | while read -r f; do
+            debugfs -w -R "write $f ${f#.}" "${rootfs_img_tmp}" >/dev/null 2>&1
+        done
 
-            find . -type l | while read -r lnk; do
-                target=$(readlink "$lnk")
-                debugfs -w -R "symlink ${lnk#.} $target" "${rootfs_img_tmp}" >/dev/null 2>&1
-            done
-        )
-    fi
+        find . -type l | while read -r lnk; do
+            target=$(readlink "$lnk")
+            debugfs -w -R "symlink ${lnk#.} $target" "${rootfs_img_tmp}" >/dev/null 2>&1
+        done
+    )
 
     mv -f "${rootfs_img_tmp}" "${ALPINE_ROOTFS_IMG}"
     trap - EXIT
     alpine_cleanup_rootfs_dir "${rootfs_dir}"
-    rm -rf "${mount_dir}"
 
     success "Alpine rootfs created: ${ALPINE_ROOTFS_IMG}"
 }
