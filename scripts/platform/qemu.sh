@@ -230,21 +230,72 @@ arceos() {
     bash "${SCRIPT_DIR}/../os/arceos.sh" "$platform" --images-dir "${arceos_images_dir}" --image-name "arceos-qemu" "$@"
 }
 
+qemu_ivc_arceos_config() {
+    local package="$1"
+    local config_dir="${BUILD_DIR}/qemu-${ARCH}-ivc"
+    local config_path="${config_dir}/${package}.toml"
+
+    mkdir -p "${config_dir}"
+    if [[ ! -f "${config_path}" ]]; then
+        cat > "${config_path}" <<'EOF'
+features = ["ax-std"]
+log = "Warn"
+EOF
+    fi
+    printf '%s\n' "${config_path}"
+}
+
+qemu_ivc_require_file() {
+    local path="$1"
+    local description="$2"
+
+    [[ -f "${path}" ]] || die "Missing ${description}: ${path}"
+}
+
+qemu_ivc_build_arceos_guest() {
+    local package="$1"
+    local image_name="$2"
+    local arceos_images_dir="${PLATFORM_IMAGES_DIR}/arceos"
+    local image_path="${arceos_images_dir}/${image_name}"
+    local config_path
+
+    [[ "${ARCH}" == "aarch64" ]] || die "Axvisor IVC payload is currently only supported for qemu aarch64"
+    if [[ -f "${image_path}" ]]; then
+        info "Using existing Axvisor IVC ArceOS guest image: ${image_path}"
+        return 0
+    fi
+
+    info "Building Axvisor IVC ArceOS guest: ${package} -> ${image_path}"
+    config_path="$(qemu_ivc_arceos_config "${package}")"
+    bash "${SCRIPT_DIR}/../os/arceos.sh" \
+        aarch64-dyn \
+        --images-dir "${arceos_images_dir}" \
+        --image-name "${image_name}" \
+        --package "${package}" \
+        --target aarch64-unknown-none-softfloat \
+        --config "${config_path}"
+
+    qemu_ivc_require_file "${image_path}" "Axvisor IVC ArceOS guest image (${package})"
+}
+
 qemu_ivc_ensure_linux_guest() {
     local linux_image="${PLATFORM_IMAGES_DIR}/linux/linux-qemu"
 
     [[ "${ARCH}" == "aarch64" ]] || die "Axvisor IVC Linux guest is currently only supported for qemu aarch64"
     if [[ -f "${linux_image}" ]]; then
+        info "Using existing qemu aarch64 Linux guest image: ${linux_image}"
         return 0
     fi
 
     linux
 }
 
-qemu_ivc_build_linux_module() {
+qemu_ivc_build_linux_tools() {
     local ivc_dir="${AXVISOR_TOOLS_SRC_DIR}/ivc"
     local overlay_dir="$1"
     local module="${ivc_dir}/kernel_driver/axvisor.ko"
+    local subscriber="${ivc_dir}/subscribe-aarch64"
+    local built_subscriber="${ivc_dir}/build/demo/subscribe"
 
     if [[ "${AXVISOR_TOOLS_SKIP_CHECKOUT}" == "1" ]]; then
         [[ -d "${AXVISOR_TOOLS_SRC_DIR}" ]] || die "AXVISOR_TOOLS_SRC_DIR does not exist: ${AXVISOR_TOOLS_SRC_DIR}"
@@ -252,6 +303,19 @@ qemu_ivc_build_linux_module() {
     else
         clone_repository "${AXVISOR_TOOLS_REPO_URL}" "${AXVISOR_TOOLS_SRC_DIR}"
         checkout_ref "${AXVISOR_TOOLS_SRC_DIR}" "${AXVISOR_TOOLS_REF}"
+    fi
+
+    if [[ ! -f "${subscriber}" ]]; then
+        info "Building Axvisor IVC Linux subscriber demo"
+        make -C "${ivc_dir}" \
+            ARCH=arm64 \
+            CROSS="${AARCH64_MUSL_CROSS:-aarch64-linux-musl-}" \
+            demo
+        [[ -f "${built_subscriber}" ]] || die "Linux IVC subscriber demo was not produced: ${built_subscriber}"
+        cp -f "${built_subscriber}" "${subscriber}"
+        chmod +x "${subscriber}"
+    else
+        info "Using existing Axvisor IVC Linux subscriber demo: ${subscriber}"
     fi
 
     info "Building Axvisor IVC Linux kernel module"
@@ -265,9 +329,35 @@ qemu_ivc_build_linux_module() {
         CROSS_COMPILE="${AARCH64_CROSS_COMPILE:-aarch64-linux-gnu-}" \
         KDIR="${LINUX_SRC_DIR}"
     [[ -f "${module}" ]] || die "Linux IVC kernel module was not produced: ${module}"
+    qemu_ivc_require_file "${subscriber}" "Linux IVC subscriber demo"
 
     mkdir -p "${overlay_dir}/root"
     cp -f "${module}" "${overlay_dir}/root/axvisor.ko"
+    cp -f "${subscriber}" "${overlay_dir}/root/ivc-subscribe"
+    chmod 0755 "${overlay_dir}/root/ivc-subscribe"
+
+    qemu_ivc_require_file "${overlay_dir}/root/axvisor.ko" "rootfs overlay axvisor kernel module"
+    qemu_ivc_require_file "${overlay_dir}/root/ivc-subscribe" "rootfs overlay Linux IVC subscriber demo"
+}
+
+qemu_ivc_validate_payloads() {
+    local overlay_dir="$1"
+
+    qemu_ivc_require_file "${PLATFORM_IMAGES_DIR}/arceos/arceos-ivc-publisher.bin" "Axvisor IVC ArceOS publisher image"
+    qemu_ivc_require_file "${PLATFORM_IMAGES_DIR}/arceos/arceos-ivc-subscriber.bin" "Axvisor IVC ArceOS subscriber image"
+    qemu_ivc_require_file "${overlay_dir}/root/axvisor.ko" "Axvisor IVC Linux kernel module overlay"
+    qemu_ivc_require_file "${overlay_dir}/root/ivc-subscribe" "Axvisor IVC Linux subscriber overlay"
+    success "Axvisor IVC rootfs payloads are ready"
+}
+
+qemu_ivc_validate_staged_payloads() {
+    local stage_dir="$1"
+    local overlay_dir="$2"
+
+    qemu_ivc_require_file "${stage_dir}/guest/arceos/arceos-ivc-publisher.bin" "staged Axvisor IVC ArceOS publisher image"
+    qemu_ivc_require_file "${stage_dir}/guest/arceos/arceos-ivc-subscriber.bin" "staged Axvisor IVC ArceOS subscriber image"
+    qemu_ivc_require_file "${overlay_dir}/root/axvisor.ko" "staged Axvisor IVC Linux kernel module overlay"
+    qemu_ivc_require_file "${overlay_dir}/root/ivc-subscribe" "staged Axvisor IVC Linux subscriber overlay"
 }
 
 qemu_prepare_ivc_payloads() {
@@ -278,7 +368,10 @@ qemu_prepare_ivc_payloads() {
     qemu_ivc_ensure_linux_guest
 
     rm -rf "${overlay_dir}"
-    qemu_ivc_build_linux_module "${overlay_dir}"
+    qemu_ivc_build_arceos_guest "arceos-ivc-publisher" "arceos-ivc-publisher.bin"
+    qemu_ivc_build_arceos_guest "arceos-ivc-subscriber" "arceos-ivc-subscriber.bin"
+    qemu_ivc_build_linux_tools "${overlay_dir}"
+    qemu_ivc_validate_payloads "${overlay_dir}"
 }
 
 zephyr() {
@@ -430,10 +523,12 @@ qemu_rootfs_inject_platform_dir() {
                 ;;
             alpine)
                 if [[ "${ARCH}" == "aarch64" ]]; then
+                    local alpine_rootfs="${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img"
                     qemu_prepare_ivc_payloads
                     rootfs_stage_guest_tree "${stage_dir}" "${guest_dir}"
-                    rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img" "${stage_dir}/guest"
-                    rootfs_inject_overlay_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img" "${ivc_overlay_dir}"
+                    qemu_ivc_validate_staged_payloads "${stage_dir}" "${ivc_overlay_dir}"
+                    rootfs_inject_guest_stage "${alpine_rootfs}" "${stage_dir}/guest"
+                    rootfs_inject_overlay_stage "${alpine_rootfs}" "${ivc_overlay_dir}"
                 else
                     rootfs_inject_guest_stage "${ROOT_DIR}/IMAGES/rootfs/rootfs-${ARCH}-alpine.img" "${stage_dir}/guest"
                 fi
