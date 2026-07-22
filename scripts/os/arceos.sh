@@ -149,8 +149,13 @@ arceos_build() {
     local arch=$(get_platform_config "$ARCEOS_PLATFORM" "arch")
     local target=$(get_platform_config "$ARCEOS_PLATFORM" "target")
     local build_target="${ARCEOS_TARGET:-${target}}"
+    local default_config="${ARCEOS_SRC_DIR}/apps/arceos/build-${build_target}.toml"
     local build_cmd=(cargo arceos build --package "${ARCEOS_PACKAGE}")
     local extra_args=()
+
+    if [[ -z "${ARCEOS_CONFIG}" && -f "${default_config}" ]]; then
+        ARCEOS_CONFIG="${default_config}"
+    fi
 
     if [[ -n "${ARCEOS_TARGET}" ]]; then
         build_cmd+=(--target "${ARCEOS_TARGET}")
