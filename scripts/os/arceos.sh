@@ -10,7 +10,7 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 
 # Default values
 ARCEOS_REPO_URL="${ARCEOS_REPO_URL:-https://github.com/rcore-os/tgoskits.git}"
-ARCEOS_REF="${ARCEOS_REF:-b9299158932a89b69ced203b071f752de79836aa}"
+ARCEOS_REF="${ARCEOS_REF:-2703515cd40f753a205f2b7c26d44cd1b44853b8}"
 ARCEOS_SRC_DIR="${ARCEOS_SRC_DIR:-${BUILD_DIR}/tgoskits}"
 ARCEOS_PATCH_DIR="${ARCEOS_PATCH_DIR:-${ROOT_DIR}/patches/arceos}"
 
@@ -18,6 +18,9 @@ ARCEOS_PATCH_DIR="${ARCEOS_PATCH_DIR:-${ROOT_DIR}/patches/arceos}"
 ARCEOS_PLATFORM=""
 ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/arceos"
 ARCEOS_IMAGE_NAME=""
+ARCEOS_PACKAGE="arceos-helloworld"
+ARCEOS_TARGET=""
+ARCEOS_CONFIG=""
 ARCEOS_ARGS=""
 
 # Platform-specific configurations
@@ -70,6 +73,9 @@ arceos_usage() {
     printf '  --patch-dir <dir>             Patch directory (default: patches/arceos)\n'
     printf '  --images-dir <dir>            Output images directory (default: IMAGES/arceos)\n'
     printf '  --image-name <name>           Output image name (default: current command)\n'
+    printf '  --package <name>              ArceOS package to build (default: arceos-helloworld)\n'
+    printf '  --target <triple>             Target triple passed to cargo arceos build\n'
+    printf '  --config <path>               ArceOS build config passed to cargo arceos build\n'
     printf '  The other options will be directly passed to cargo arceos build.\n'
     printf '\n'
     printf 'Environment Variables:\n'
@@ -106,6 +112,18 @@ arceos_parse_args() {
                 ARCEOS_IMAGE_NAME="$2"
                 shift 2
                 ;;
+            --package)
+                ARCEOS_PACKAGE="$2"
+                shift 2
+                ;;
+            --target)
+                ARCEOS_TARGET="$2"
+                shift 2
+                ;;
+            --config)
+                ARCEOS_CONFIG="$2"
+                shift 2
+                ;;
             *)
                 ARCEOS_ARGS="$ARCEOS_ARGS $1"
                 shift
@@ -114,10 +132,43 @@ arceos_parse_args() {
     done
 }
 
+arceos_artifact_target_dir() {
+    local target="$1"
+
+    case "${target}" in
+        aarch64-*) printf 'aarch64-unknown-linux-musl' ;;
+        riscv64*) printf 'riscv64gc-unknown-linux-musl' ;;
+        loongarch64-*) printf 'loongarch64-unknown-linux-musl' ;;
+        x86_64-*) printf 'x86_64-unknown-linux-musl' ;;
+        *) printf '%s' "${target}" ;;
+    esac
+}
+
 arceos_build() {
     # Get platform-specific configuration
     local arch=$(get_platform_config "$ARCEOS_PLATFORM" "arch")
     local target=$(get_platform_config "$ARCEOS_PLATFORM" "target")
+    local build_target="${ARCEOS_TARGET:-${target}}"
+    local default_config="${ARCEOS_SRC_DIR}/apps/arceos/build-${build_target}.toml"
+    local build_cmd=(cargo arceos build --package "${ARCEOS_PACKAGE}")
+    local extra_args=()
+
+    if [[ -z "${ARCEOS_CONFIG}" && -f "${default_config}" ]]; then
+        ARCEOS_CONFIG="${default_config}"
+    fi
+
+    if [[ -n "${ARCEOS_TARGET}" ]]; then
+        build_cmd+=(--target "${ARCEOS_TARGET}")
+    else
+        build_cmd+=(--arch "${arch}")
+    fi
+    if [[ -n "${ARCEOS_CONFIG}" ]]; then
+        build_cmd+=(--config "${ARCEOS_CONFIG}")
+    fi
+    if [[ -n "${ARCEOS_ARGS}" ]]; then
+        read -r -a extra_args <<< "${ARCEOS_ARGS}"
+        build_cmd+=("${extra_args[@]}")
+    fi
 
     if [[ -d "$ARCEOS_SRC_DIR" ]]; then
         pushd "$ARCEOS_SRC_DIR" >/dev/null
@@ -129,19 +180,29 @@ arceos_build() {
             rm -f "$snapshot_file"
         fi
 
-        local build_cmd="cargo arceos build --package ax-helloworld-myplat --arch $arch $ARCEOS_ARGS"
-        info "EXEC: $build_cmd"
-        cargo arceos build --package ax-helloworld-myplat --arch "$arch" $ARCEOS_ARGS
+        info "EXEC: ${build_cmd[*]}"
+        "${build_cmd[@]}"
 
         popd >/dev/null
     fi
 
     if [[ "${ARCEOS_ARGS}" != *"clean"* ]]; then
-        local bin_path="$ARCEOS_SRC_DIR/target/$target/release/ax-helloworld-myplat.bin"
+        local bin_path="$ARCEOS_SRC_DIR/target/$build_target/release/${ARCEOS_PACKAGE}.bin"
+        if [[ ! -f "$bin_path" ]]; then
+            local artifact_target
+            artifact_target="$(arceos_artifact_target_dir "${build_target}")"
+            bin_path="$ARCEOS_SRC_DIR/target/$artifact_target/release/${ARCEOS_PACKAGE}.bin"
+        fi
         if [[ ! -f "$bin_path" ]]; then
             # x86_64 target does not produce .bin, use ELF directly
-            bin_path="$ARCEOS_SRC_DIR/target/$target/release/ax-helloworld-myplat"
+            bin_path="$ARCEOS_SRC_DIR/target/$build_target/release/${ARCEOS_PACKAGE}"
         fi
+        if [[ ! -f "$bin_path" ]]; then
+            local artifact_target
+            artifact_target="$(arceos_artifact_target_dir "${build_target}")"
+            bin_path="$ARCEOS_SRC_DIR/target/$artifact_target/release/${ARCEOS_PACKAGE}"
+        fi
+        [[ -f "$bin_path" ]] || die "ArceOS build artifact not found: $bin_path"
         info "Copying build artifacts: $bin_path -> $ARCEOS_IMAGES_DIR/$ARCEOS_IMAGE_NAME"
         mkdir -p "${ARCEOS_IMAGES_DIR}"
         cp "$bin_path" "${ARCEOS_IMAGES_DIR}/$ARCEOS_IMAGE_NAME"
