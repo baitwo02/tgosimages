@@ -18,7 +18,7 @@ ARCEOS_PATCH_DIR="${ARCEOS_PATCH_DIR:-${ROOT_DIR}/patches/arceos}"
 ARCEOS_PLATFORM=""
 ARCEOS_IMAGES_DIR="${ROOT_DIR}/IMAGES/arceos"
 ARCEOS_IMAGE_NAME=""
-ARCEOS_PACKAGE="ax-helloworld-myplat"
+ARCEOS_PACKAGE="arceos-helloworld"
 ARCEOS_TARGET=""
 ARCEOS_CONFIG=""
 ARCEOS_ARGS=""
@@ -73,7 +73,7 @@ arceos_usage() {
     printf '  --patch-dir <dir>             Patch directory (default: patches/arceos)\n'
     printf '  --images-dir <dir>            Output images directory (default: IMAGES/arceos)\n'
     printf '  --image-name <name>           Output image name (default: current command)\n'
-    printf '  --package <name>              ArceOS package to build (default: ax-helloworld-myplat)\n'
+    printf '  --package <name>              ArceOS package to build (default: arceos-helloworld)\n'
     printf '  --target <triple>             Target triple passed to cargo arceos build\n'
     printf '  --config <path>               ArceOS build config passed to cargo arceos build\n'
     printf '  The other options will be directly passed to cargo arceos build.\n'

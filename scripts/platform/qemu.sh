@@ -236,12 +236,10 @@ qemu_ivc_arceos_config() {
     local config_path="${config_dir}/${package}.toml"
 
     mkdir -p "${config_dir}"
-    if [[ ! -f "${config_path}" ]]; then
-        cat > "${config_path}" <<'EOF'
-features = ["ax-std"]
+    cat > "${config_path}" <<'EOF'
+features = ["arceos"]
 log = "Warn"
 EOF
-    fi
     printf '%s\n' "${config_path}"
 }
 
