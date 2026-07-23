@@ -30,6 +30,7 @@ jobs:
           ./build.sh platform qemu-loongarch64 linux
           ./build.sh platform phytiumpi all
           ./build.sh platform tac-e400-plc all
+          ./build.sh platform orangepi-5-plus starry
         
       - name: Prepare release files
         id: release
@@ -47,6 +48,7 @@ jobs:
             - Phytium Pi
             - ROC-RK3568-PC development board
             - TAC-E400-PLC industrial controller
+            - Orange Pi 5 Plus StarryOS guest kernel
 
             File naming convention: `arceos-{board}-{arch}-{config}.bin`
           generate_release_notes: true

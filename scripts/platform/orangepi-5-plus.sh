@@ -27,6 +27,7 @@ usage() {
     printf '  linux                             Build Linux system (includes U-Boot)\n'
     printf '  uboot                             Build only U-Boot\n'
     printf '  arceos                            Build only the ArceOS system\n'
+    printf '  starry                            Build only the StarryOS guest image\n'
     printf '  zephyr                            Build only the Zephyr guest image\n'
     printf '  freertos                          Build only the FreeRTOS guest image\n'
     printf '  help, -h, --help                  Display this help information\n'
@@ -138,6 +139,24 @@ arceos() {
     bash "${SCRIPT_DIR}/../os/arceos.sh" aarch64-dyn --images-dir "${arceos_images_dir}" --image-name orangepi-5-plus "$@"
 }
 
+starry() {
+    local starry_images_dir="${PLATFORM_IMAGES_DIR}/starry"
+    local starry_release_images_dir="${ROOT_DIR}/IMAGES/orangepi-5-plus-starry"
+
+    if [[ "$@" != *"clean"* ]]; then
+        info "Building StarryOS using common starry.sh script"
+        bash "${SCRIPT_DIR}/../os/starry.sh" orangepi-5-plus \
+            --images-dir "${starry_images_dir}" \
+            --release-images-dir "${starry_release_images_dir}" \
+            --image-name orangepi-5-plus "$@"
+    else
+        info "Cleaning StarryOS using common starry.sh script"
+        bash "${SCRIPT_DIR}/../os/starry.sh" clean \
+            --images-dir "${starry_images_dir}" \
+            --release-images-dir "${starry_release_images_dir}"
+    fi
+}
+
 zephyr() {
     local zephyr_images_dir="${PLATFORM_IMAGES_DIR}/zephyr"
 
@@ -195,6 +214,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         arceos)
             arceos "$@"
             ;;
+        starry)
+            starry "$@"
+            ;;
         zephyr)
             zephyr "$@"
             ;;
@@ -202,10 +224,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             freertos "$@"
             ;;
         all)
-            run_parallel_functions "all" linux arceos zephyr freertos -- "$@"
+            run_parallel_functions "all" linux arceos starry zephyr freertos -- "$@"
             ;;
         clean)
-            run_parallel_functions "clean" linux arceos zephyr freertos -- clean
+            run_parallel_functions "clean" linux arceos starry zephyr freertos -- clean
             ;;
         *)
             die "Unknown command: $cmd" >&2

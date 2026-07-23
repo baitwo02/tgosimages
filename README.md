@@ -6,7 +6,7 @@ English | [中文](README_CN.md)
 
 This repository contains build scripts, patches, and helper tools for generating TGOS-related images. It covers:
 
-- Platform-specific Linux and ArceOS builds
+- Platform-specific Linux, ArceOS, and StarryOS builds
 - Common OS builders under `scripts/os/`
 - Rootfs generation under `scripts/rootfs/`
 - Packaging and release helpers
@@ -21,7 +21,7 @@ The repository is now organized by responsibility instead of placing every scrip
 | `build.sh` | Top-level entry point for OS, rootfs, and release tasks |
 | `run.sh` | Quick QEMU boot helper for generated QEMU Linux images |
 | `scripts/platform/` | Platform entry scripts such as Phytium Pi, QEMU, Orange Pi, etc. |
-| `scripts/os/` | Common OS builders such as ArceOS, Zephyr, FreeRTOS, and RT-Thread |
+| `scripts/os/` | Common OS builders such as ArceOS, StarryOS, Zephyr, FreeRTOS, and RT-Thread |
 | `scripts/rootfs/` | Rootfs builders for BusyBox, Alpine, and Debian |
 | `scripts/tools/` | Packaging / release helpers and other utilities |
 | `scripts/lib/` | Shared shell helpers |
@@ -54,6 +54,7 @@ These scripts provide reusable build flows and are called either directly or by 
 | Script | Main responsibility |
 | --- | --- |
 | `scripts/os/arceos.sh` | Common ArceOS builder |
+| `scripts/os/starry.sh` | StarryOS guest-kernel builder |
 | `scripts/os/zephyr.sh` | Common Zephyr builder |
 | `scripts/os/freertos.sh` | Common FreeRTOS builder |
 | `scripts/os/rtthread.sh` | Common RT-Thread builder |
@@ -164,6 +165,9 @@ Some platform builds require:
 ./build.sh platform qemu-aarch64 linux
 ./build.sh platform qemu all --rootfs busybox,alpine,debian
 
+# Orange Pi 5 Plus StarryOS guest kernel
+./build.sh platform orangepi-5-plus starry
+
 # Rootfs builds
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs
 ./build.sh rootfs alpine riscv64 --out_dir IMAGES/rootfs/alpine-riscv64.img
@@ -227,6 +231,39 @@ Artifacts are collected under `IMAGES/`. Common locations include:
 | `IMAGES/rootfs` | Standalone rootfs images generated directly by rootfs scripts |
 | `IMAGES/<platform>/linux` | Linux artifacts for a hardware platform |
 | `IMAGES/<platform>/arceos` | ArceOS artifacts for a hardware platform |
+| `IMAGES/orangepi/starry/orangepi-5-plus` | StarryOS kernel for `/guest/starry/orangepi-5-plus` |
+| `IMAGES/orangepi-5-plus-starry` | Standalone StarryOS release staging (image, manifest, and SHA256) |
+
+### Orange Pi 5 Plus StarryOS
+
+Use the unified platform entry point:
+
+```bash
+./build.sh platform orangepi-5-plus starry
+```
+
+The builder uses `os/StarryOS/configs/board/orangepi-5-plus.toml` from the latest
+tgoskits `dev` branch by default. The generated `manifest.toml` records the exact
+commit used. Override it explicitly for reproducible or revision-specific builds:
+
+```bash
+./build.sh platform orangepi-5-plus starry --ref <tgoskits-commit>
+```
+
+The guest kernel is written to `IMAGES/orangepi/starry/orangepi-5-plus` and the
+standalone release staging directory is `IMAGES/orangepi-5-plus-starry/`.
+`./build.sh release pack` creates `release/orangepi-5-plus-starry.tar.xz`.
+Clean both outputs with:
+
+```bash
+./build.sh platform orangepi-5-plus starry clean
+```
+
+Run the deterministic packaging and registry smoke test with:
+
+```bash
+scripts/tests/starry-release-smoke.sh
+```
 
 Typical QEMU Linux files:
 

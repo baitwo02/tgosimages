@@ -6,7 +6,7 @@
 
 本仓库包含 TGOS 相关镜像的构建脚本、补丁与辅助工具，覆盖以下内容：
 
-- 面向具体平台的 Linux 与 ArceOS 构建流程
+- 面向具体平台的 Linux、ArceOS 与 StarryOS 构建流程
 - `scripts/os/` 下的通用 OS 构建器
 - `scripts/rootfs/` 下的根文件系统生成器
 - 打包与发布辅助脚本
@@ -21,7 +21,7 @@
 | `build.sh` | OS、rootfs、release 的统一入口 |
 | `run.sh` | QEMU Linux 镜像的快速启动辅助脚本 |
 | `scripts/platform/` | 各平台入口脚本，如 Phytium Pi、QEMU、Orange Pi 等 |
-| `scripts/os/` | 通用 OS 构建器，如 ArceOS、Zephyr、FreeRTOS 和 RT-Thread |
+| `scripts/os/` | 通用 OS 构建器，如 ArceOS、StarryOS、Zephyr、FreeRTOS 和 RT-Thread |
 | `scripts/rootfs/` | BusyBox、Alpine、Debian 根文件系统生成脚本 |
 | `scripts/tools/` | 打包、发布及其他辅助工具 |
 | `scripts/lib/` | 共享 shell 工具函数 |
@@ -54,6 +54,7 @@
 | 脚本 | 主要职责 |
 | --- | --- |
 | `scripts/os/arceos.sh` | 通用 ArceOS 构建器 |
+| `scripts/os/starry.sh` | StarryOS 客户机内核构建器 |
 | `scripts/os/zephyr.sh` | 通用 Zephyr 构建器 |
 | `scripts/os/freertos.sh` | 通用 FreeRTOS 构建器 |
 | `scripts/os/rtthread.sh` | 通用 RT-Thread 构建器 |
@@ -164,6 +165,9 @@ sudo apt install \
 ./build.sh platform qemu-aarch64 linux
 ./build.sh platform qemu all --rootfs busybox,alpine,debian
 
+# Orange Pi 5 Plus StarryOS 客户机内核
+./build.sh platform orangepi-5-plus starry
+
 # rootfs 构建
 ./build.sh rootfs busybox aarch64 --out_dir IMAGES/rootfs
 ./build.sh rootfs alpine riscv64 --out_dir IMAGES/rootfs/alpine-riscv64.img
@@ -227,6 +231,38 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 | `IMAGES/rootfs` | 直接由 rootfs 脚本生成的独立镜像 |
 | `IMAGES/<platform>/linux` | 某硬件平台的 Linux 产物 |
 | `IMAGES/<platform>/arceos` | 某硬件平台的 ArceOS 产物 |
+| `IMAGES/orangepi/starry/orangepi-5-plus` | 可放入客户机根文件系统 `/guest/starry/orangepi-5-plus` 的 StarryOS 内核 |
+| `IMAGES/orangepi-5-plus-starry` | 独立 StarryOS 发布包的暂存目录（镜像、manifest 和 SHA256） |
+
+### Orange Pi 5 Plus StarryOS
+
+推荐使用统一入口：
+
+```bash
+./build.sh platform orangepi-5-plus starry
+```
+
+构建脚本固定使用 tgoskits 中的
+`os/StarryOS/configs/board/orangepi-5-plus.toml`，默认构建 tgoskits 最新的
+`dev` 分支。生成的 `manifest.toml` 会记录实际构建提交。需要复现或验证指定提交时可显式覆盖：
+
+```bash
+./build.sh platform orangepi-5-plus starry --ref <tgoskits-commit>
+```
+
+构建完成后：
+
+- 客户机加载文件：`IMAGES/orangepi/starry/orangepi-5-plus`
+- 独立发布暂存目录：`IMAGES/orangepi-5-plus-starry/`
+- 发布归档：执行 `./build.sh release pack` 后得到
+  `release/orangepi-5-plus-starry.tar.xz`
+- 清理产物：`./build.sh platform orangepi-5-plus starry clean`
+
+发布包可由镜像注册表识别为 `orangepi-5-plus-starry`（`aarch64`）。本地验证脚本：
+
+```bash
+scripts/tests/starry-release-smoke.sh
+```
 
 QEMU Linux 的典型文件包括：
 

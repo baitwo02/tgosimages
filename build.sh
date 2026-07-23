@@ -40,6 +40,7 @@ usage() {
     printf '%s\n' "  zephyr               -> scripts/os/zephyr.sh"
     printf '%s\n' "  freertos             -> scripts/os/freertos.sh"
     printf '%s\n' "  rtthread             -> scripts/os/rtthread.sh"
+    printf '%s\n' "  starry               -> scripts/os/starry.sh (use through an Orange Pi platform target)"
     printf '%s\n' "  all                  -> build all independent OS targets in parallel"
     printf '%s\n' "  clean                -> clean all independent OS targets in parallel"
     printf '%s\n' ""
@@ -63,7 +64,9 @@ usage() {
     printf '%s\n' "  $0 platform qemu-loongarch64 linux # build LoongArch64 linux with default rootfs"
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
+    printf '%s\n' "  $0 platform orangepi-5-plus starry"
     printf '%s\n' "  $0 os arceos aarch64-dyn --image-name arceos.bin"
+    printf '%s\n' "  $0 os starry orangepi-5-plus"
     printf '%s\n' "  $0 os all <options>"
     printf '%s\n' "  $0 os clean"
     printf '%s\n' "  $0 rootfs busybox aarch64 --out_dir IMAGES/rootfs"
@@ -292,7 +295,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                 clean)
                     run_parallel_targets "os" "clean" arceos zephyr freertos rtthread -- clean || exit 1
                     ;;
-                arceos|zephyr|freertos|rtthread)
+                arceos|starry|zephyr|freertos|rtthread)
                     script_path="${OS_DIR}/${target}.sh"
                     run_checked_script "$script_path" "$@"
                     ;;
