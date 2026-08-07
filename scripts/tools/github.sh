@@ -393,11 +393,15 @@ registry_process_asset() {
         return 0
     fi
 
-    if [[ "${stem}" =~ ^qemu[-_]([A-Za-z0-9_]+)[-_]([A-Za-z0-9-]+)$ ]]; then
+    # qemu-<arch>-<os>: separator must be '-' (not '_'), otherwise arches like
+    # "x86_64" would be split incorrectly. Fall through on failure so the
+    # qemu-<arch> bundle branch below can handle bare arches.
+    if [[ "${stem}" =~ ^qemu[-_]([A-Za-z0-9_]+)-([A-Za-z0-9-]+)$ ]]; then
         arch="${BASH_REMATCH[1]}"
         os_name="${BASH_REMATCH[2]}"
-        registry_add_os_entry "${output_file}" "${asset_file}" "${asset_name}" "${stem}" "${version}" "${url}" "${released_at}" "qemu-${arch}" "${arch}" "${os_name}"
-        return 0
+        if registry_add_os_entry "${output_file}" "${asset_file}" "${asset_name}" "${stem}" "${version}" "${url}" "${released_at}" "qemu-${arch}" "${arch}" "${os_name}"; then
+            return 0
+        fi
     fi
 
     if [[ "${stem}" =~ ^qemu[-_]([A-Za-z0-9_]+)$ ]]; then
@@ -405,6 +409,14 @@ registry_process_asset() {
         registry_add_platform_bundle_entry "${output_file}" "${asset_file}" "${asset_name}" "${stem}" "${version}" "${url}" "${released_at}" "qemu-${arch}" "${arch}"
         return 0
     fi
+
+    # Board guest bundles containing multiple OSes (e.g. phytiumpi.tar.xz).
+    case "${stem}" in
+        phytiumpi)
+            registry_add_platform_bundle_entry "${output_file}" "${asset_file}" "${asset_name}" "${stem}" "${version}" "${url}" "${released_at}" "phytiumpi" "aarch64"
+            return 0
+            ;;
+    esac
 
     if [[ "${stem}" =~ ^(.+)[-_](arceos|linux|zephyr|freertos|rtthread|starry)$ ]]; then
         target="${BASH_REMATCH[1]}"
