@@ -85,10 +85,10 @@ released_at = "2026-07-27T02:21:53Z"
 name = "rootfs-aarch64-alpine.img"
 version = "0.0.10"
 description = "Alpine rootfs image for aarch64"
-sha256 = "5dd54f97eedb7a984b8832ac559fa84a52034cf12899e8df5b53f07678547a03"
+sha256 = "f5cab592811be542820006ef9e5d4d4153fef1b4bf11a569bb3e9210ac44fdd9"
 arch = "aarch64"
 url = "https://github.com/rcore-os/tgosimages/releases/download/v0.0.10/rootfs-aarch64-alpine.img.tar.xz"
-released_at = "2026-07-27T02:22:09Z"
+released_at = "2026-08-06T12:46:40Z"
 
 [[images]]
 name = "rootfs-aarch64-busybox.img"
