@@ -1,0 +1,19 @@
+&virtio_mmio0 {
+    status = "okay";
+
+    virtio_net0: virtio-net {
+        compatible = "virtio,net";
+        status = "okay";
+        local-mac-address = [52 54 00 12 34 57];
+    };
+};
+
+&pcie {
+    status = "disabled";
+    /delete-node/ pcie@1,0;
+};
+
+&{/chosen} {
+    /delete-property/ zephyr,pcie-controller;
+    zephyr,uart-pipe = &uart0;
+};

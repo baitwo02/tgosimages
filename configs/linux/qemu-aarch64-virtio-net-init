@@ -1,0 +1,47 @@
+#!/bin/sh
+set -u
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+
+for _ in 1 2 3 4 5; do
+    [ -e /dev/ttyAMA0 ] && break
+    sleep 1
+done
+exec </dev/ttyAMA0 >/dev/ttyAMA0 2>&1
+
+echo "LINUX_INIT: booted"
+echo "LINUX_INIT: netdevs=$(ls /sys/class/net 2>/dev/null || true)"
+ip link 2>/dev/null || true
+
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ip link set eth0 up 2>/dev/null; then
+        break
+    fi
+    echo "LINUX_INIT: waiting for eth0"
+    sleep 1
+done
+
+ip addr replace 192.0.2.1/24 dev eth0 2>/dev/null || true
+arp -s 192.0.2.2 52:54:00:12:34:57 -i eth0 2>/dev/null || true
+ip addr show eth0 2>/dev/null || true
+arp -n 2>/dev/null || true
+
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    echo "LINUX_INIT: attempt ${attempt} ping 192.0.2.2"
+    if ping -c 1 -W 3 192.0.2.2 >/tmp/ping.log 2>&1; then
+        cat /tmp/ping.log
+        echo "LINUX_ZEPHYR_VIRTIO_NET_PASS peer=192.0.2.2 protocol=icmp"
+        exec sh
+    fi
+    cat /tmp/ping.log 2>/dev/null || true
+    sleep 2
+done
+
+echo "LINUX_ZEPHYR_VIRTIO_NET_FAIL"
+while true; do
+    sleep 60
+done

@@ -163,6 +163,7 @@ Some platform builds require:
 ./build.sh platform phytiumpi
 ./build.sh platform qemu all
 ./build.sh platform qemu-aarch64 linux
+./build.sh platform qemu-aarch64 zephyr-net --rootfs alpine
 ./build.sh platform qemu all --rootfs busybox,alpine,debian
 
 # Orange Pi 5 Plus StarryOS guest kernel

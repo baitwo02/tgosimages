@@ -18,6 +18,8 @@ ZEPHYR_SDK_URL="${ZEPHYR_SDK_URL:-https://github.com/zephyrproject-rtos/sdk-ng/r
 ZEPHYR_SDK_DIR="${ZEPHYR_SDK_DIR:-${BUILD_DIR}/zephyr-sdk}"
 ZEPHYR_TOOLCHAIN_VARIANT="${ZEPHYR_TOOLCHAIN_VARIANT:-cross-compile}"
 ZEPHYR_CROSS_COMPILE="${ZEPHYR_CROSS_COMPILE:-${ZEPHYR_SDK_DIR}/bin/aarch64-zephyr-elf-}"
+ZEPHYR_CROSS_COMPILE_TOOLCHAIN_PATH="${ZEPHYR_CROSS_COMPILE_TOOLCHAIN_PATH:-${ZEPHYR_SDK_DIR}}"
+ZEPHYR_SYSROOT="${ZEPHYR_SYSROOT:-${ZEPHYR_SDK_DIR}/aarch64-zephyr-elf}"
 
 ZEPHYR_PLATFORM=""
 ZEPHYR_APP=""
@@ -29,6 +31,8 @@ ZEPHYR_IMAGE_NAME=""
 ZEPHYR_BIN_NAME=""
 ZEPHYR_ELF_NAME=""
 ZEPHYR_DTB_NAME=""
+ZEPHYR_DTC_OVERLAY_FILE=""
+ZEPHYR_EXTRA_CONF_FILE=""
 ZEPHYR_ARGS=()
 
 zephyr_usage() {
@@ -39,6 +43,7 @@ zephyr_usage() {
     printf '\n'
     printf 'Commands:\n'
     printf '  qemu-aarch64                  Build Zephyr guest for QEMU aarch64\n'
+    printf '  qemu-aarch64-net              Build Zephyr VirtIO-net echo server for QEMU aarch64\n'
     printf '  phytiumpi                     Build Zephyr guest for PhytiumPi\n'
     printf '  tac-e400-plc                  Build Zephyr guest for TAC-E400-PLC\n'
     printf '  orangepi-5-plus               Build Zephyr guest for Orange Pi 5 Plus\n'
@@ -55,6 +60,8 @@ zephyr_usage() {
     printf '  --cross-compile <prefix>      CROSS_COMPILE prefix\n'
     printf '  --images-dir <dir>            Output image directory override\n'
     printf '  --image-name <name>           Output image base name (default: current command)\n'
+    printf '  --dtc-overlay <path>          Devicetree overlay supplied to the Zephyr build\n'
+    printf '  --extra-conf <path>           Additional Kconfig fragment supplied to the Zephyr build\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/zephyr.sh qemu-aarch64\n'
@@ -94,6 +101,14 @@ zephyr_parse_args() {
                 ;;
             --image-name)
                 ZEPHYR_IMAGE_NAME="$2"
+                shift 2
+                ;;
+            --dtc-overlay)
+                ZEPHYR_DTC_OVERLAY_FILE="$2"
+                shift 2
+                ;;
+            --extra-conf)
+                ZEPHYR_EXTRA_CONF_FILE="$2"
                 shift 2
                 ;;
             *)
@@ -189,6 +204,10 @@ zephyr_build() {
     local build_dir="${BUILD_DIR}/${ZEPHYR_BUILD_SUBDIR}"
     local source_dir="${ZEPHYR_SRC_DIR}/${ZEPHYR_APP}"
 
+    if [[ "${ZEPHYR_APP}" = /* ]]; then
+        source_dir="${ZEPHYR_APP}"
+    fi
+
     if [[ "${ZEPHYR_ARGS[*]:-}" == *"clean"* ]]; then
         info "Cleaning Zephyr build directory ${build_dir}"
         rm -rf "${build_dir}" "${ZEPHYR_IMAGES_DIR}"
@@ -228,11 +247,19 @@ zephyr_build() {
         -S "${source_dir}"
         -DBOARD="${ZEPHYR_BOARD}"
         -DZEPHYR_TOOLCHAIN_VARIANT="${ZEPHYR_TOOLCHAIN_VARIANT}"
+        -DCROSS_COMPILE_TOOLCHAIN_PATH="${ZEPHYR_CROSS_COMPILE_TOOLCHAIN_PATH}"
+        "-DCMAKE_C_FLAGS:STRING=-isystem ${ZEPHYR_SYSROOT}/include"
         -DPython3_EXECUTABLE="${ZEPHYR_PYTHON}"
     )
 
     if [[ -n "${ZEPHYR_BOARD_ROOT}" ]]; then
         cmake_args+=("-DBOARD_ROOT=${ZEPHYR_BOARD_ROOT}")
+    fi
+    if [[ -n "${ZEPHYR_DTC_OVERLAY_FILE}" ]]; then
+        cmake_args+=("-DDTC_OVERLAY_FILE=${ZEPHYR_DTC_OVERLAY_FILE}")
+    fi
+    if [[ -n "${ZEPHYR_EXTRA_CONF_FILE}" ]]; then
+        cmake_args+=("-DEXTRA_CONF_FILE=${ZEPHYR_EXTRA_CONF_FILE}")
     fi
 
     if (( ${#ZEPHYR_ARGS[@]} > 0 )); then
@@ -271,6 +298,14 @@ configure_platform() {
             ZEPHYR_BOARD="qemu_cortex_a53"
             ZEPHYR_BUILD_SUBDIR="zephyr/qemu-aarch64"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu-aarch64/zephyr}"
+            ;;
+        qemu-aarch64-net)
+            ZEPHYR_APP="${ROOT_DIR}/configs/zephyr/virtio_net_echo"
+            ZEPHYR_BOARD="qemu_cortex_a53"
+            ZEPHYR_BUILD_SUBDIR="zephyr/qemu-aarch64-net"
+            : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu-aarch64/zephyr}"
+            ZEPHYR_DTC_OVERLAY_FILE="${ZEPHYR_DTC_OVERLAY_FILE:-${ROOT_DIR}/configs/zephyr/qemu-aarch64-virtio-net.overlay}"
+            ZEPHYR_EXTRA_CONF_FILE="${ZEPHYR_EXTRA_CONF_FILE:-${ROOT_DIR}/configs/zephyr/qemu-aarch64-virtio-net.conf}"
             ;;
         phytiumpi)
             ZEPHYR_APP="tests/benchmarks/latency_measure"
@@ -312,7 +347,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             zephyr_usage
             exit 0
             ;;
-        qemu-aarch64|phytiumpi|tac-e400-plc|orangepi-5-plus)
+        qemu-aarch64|qemu-aarch64-net|phytiumpi|tac-e400-plc|orangepi-5-plus)
             ZEPHYR_PLATFORM="${cmd}"
             ;;
         all)

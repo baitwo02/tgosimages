@@ -1,0 +1,89 @@
+diff --git a/drivers/ethernet/eth_virtio_net.c b/drivers/ethernet/eth_virtio_net.c
+index 14f3a4d2f..c5a7e1ee8 100644
+--- a/drivers/ethernet/eth_virtio_net.c
++++ b/drivers/ethernet/eth_virtio_net.c
+@@ -11,6 +11,7 @@
+ #include <zephyr/drivers/virtio/virtqueue.h>
+ #include <zephyr/sys/util.h>
+ #include <zephyr/sys/atomic.h>
++#include <string.h>
+ #include "eth.h"
+ 
+ #define DT_DRV_COMPAT virtio_net
+@@ -136,6 +137,7 @@ static int virtnet_send(const struct device *dev, struct net_pkt *pkt)
+ 	struct virtnet_data *data = dev->data;
+ 	size_t len = net_pkt_get_len(pkt);
+ 
++	memset(data->txb, 0, sizeof(struct _virtio_net_hdr));
+ 	if (net_pkt_read(pkt, data->txb + sizeof(struct _virtio_net_hdr), len)) {
+ 		LOG_ERR("could not read contents of packet to be sent");
+ 		return -EIO;
+diff --git a/drivers/virtio/virtio_mmio.c b/drivers/virtio/virtio_mmio.c
+index f9ad7070e..99069e6ba 100644
+--- a/drivers/virtio/virtio_mmio.c
++++ b/drivers/virtio/virtio_mmio.c
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <zephyr/device.h>
++#include <zephyr/kernel.h>
+ #include <zephyr/kernel/mm.h>
+ #include <zephyr/logging/log.h>
+ #include <zephyr/spinlock.h>
+@@ -30,6 +31,8 @@ struct virtio_mmio_data {
+ 
+ 	struct virtq *virtqueues;
+ 	uint16_t virtqueue_count;
++	const struct device *dev;
++	struct k_work_delayable poll_work;
+ 
+ 	struct k_spinlock isr_lock;
+ 	struct k_spinlock notify_lock;
+@@ -69,6 +72,27 @@ static void virtio_mmio_isr(const struct device *dev)
+ 	k_spin_unlock(&data->isr_lock, key);
+ }
+ 
++static void virtio_mmio_poll_work(struct k_work *work)
++{
++	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
++	struct virtio_mmio_data *data = CONTAINER_OF(dwork, struct virtio_mmio_data, poll_work);
++	const struct device *dev = data->dev;
++
++	if (dev != NULL && data->virtqueue_count != 0) {
++		k_spinlock_key_t key = k_spin_lock(&data->isr_lock);
++		const uint32_t isr_status = virtio_mmio_read32(dev, VIRTIO_MMIO_INTERRUPT_STATUS);
++
++		if (isr_status != 0U) {
++			virtio_mmio_write32(dev, VIRTIO_MMIO_INTERRUPT_ACK, isr_status);
++		}
++		virtio_isr(dev, VIRTIO_QUEUE_INTERRUPT, data->virtqueue_count);
++
++		k_spin_unlock(&data->isr_lock, key);
++	}
++
++	k_work_schedule(&data->poll_work, K_MSEC(10));
++}
++
+ struct virtq *virtio_mmio_get_virtqueue(const struct device *dev, uint16_t queue_idx)
+ {
+ 	struct virtio_mmio_data *data = dev->data;
+@@ -273,6 +297,11 @@ static DEVICE_API(virtio, virtio_mmio_driver_api) = {
+ 
+ static int virtio_mmio_init_common(const struct device *dev)
+ {
++	struct virtio_mmio_data *data = dev->data;
++
++	data->dev = dev;
++	k_work_init_delayable(&data->poll_work, virtio_mmio_poll_work);
++
+ 	DEVICE_MMIO_NAMED_MAP(dev, reg_base, K_MEM_CACHE_NONE);
+ 
+ 	const uint32_t magic = virtio_mmio_read32(dev, VIRTIO_MMIO_MAGIC_VALUE);
+@@ -304,6 +333,7 @@ static int virtio_mmio_init_common(const struct device *dev)
+ 	virtio_mmio_write_status_bit(dev, DEVICE_STATUS_DRIVER);
+ 
+ 	virtio_mmio_write_driver_feature_bit(dev, VIRTIO_F_VERSION_1, true);
++	k_work_schedule(&data->poll_work, K_MSEC(10));
+ 
+ 	return 0;
+ };

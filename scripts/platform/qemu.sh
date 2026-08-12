@@ -50,6 +50,7 @@ usage() {
     printf '  linux                             Build the Linux OS\n'
     printf '  arceos                            Build the ArceOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
+    printf '  zephyr-net                        Build the Zephyr VirtIO-net echo server (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
     printf '  all                               Build all OS targets (default)\n'
     printf '  clean                             Clean build output artifacts\n'
@@ -152,6 +153,10 @@ linux() {
                 popd >/dev/null
                 return "$status"
             }
+            if [[ "${ARCH}" == "aarch64" ]]; then
+                scripts/config --enable VIRTIO --enable VIRTIO_MMIO --enable VIRTIO_NET
+                make ARCH="${linux_arch}" CROSS_COMPILE="${cross_compile}" olddefconfig
+            fi
         fi
         
         if [[ (${#commands[@]} -eq 0 || "${commands[0]}" == "all") && ${#image_targets[@]} -gt 0 ]]; then
@@ -195,6 +200,10 @@ linux() {
                 info "Copying image: ${KIMG_PATH} -> ${linux_images_dir}/${image_outputs[$i]}"
                 cp -f "${KIMG_PATH}" "${linux_images_dir}/${image_outputs[$i]}"
             done
+            if [[ "${ARCH}" == "aarch64" ]]; then
+                install -m 0755 "${ROOT_DIR}/configs/linux/qemu-aarch64-virtio-net-verify.sh" \
+                    "${linux_images_dir}/virtio-net-verify.sh"
+            fi
             if [[ "${ARCH}" == "loongarch64" ]]; then
                 cp -f "${linux_images_dir}/vmlinux.elf" "${linux_images_dir}/linux-qemu"
             fi
@@ -380,6 +389,17 @@ zephyr() {
     fi
 
     bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64 --images-dir "${zephyr_images_dir}" --image-name "zephyr-qemu" "$@"
+}
+
+zephyr_net() {
+    local zephyr_images_dir="${PLATFORM_IMAGES_DIR}/zephyr"
+
+    if [[ "${ARCH}" != "aarch64" ]]; then
+        die "Zephyr VirtIO-net guest build is currently only supported for qemu aarch64"
+    fi
+
+    bash "${SCRIPT_DIR}/../os/zephyr.sh" qemu-aarch64-net \
+        --images-dir "${zephyr_images_dir}" --image-name "zephyr-net-qemu" "$@"
 }
 
 freertos() {
@@ -609,6 +629,10 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     [[ "${ARCH}" == "aarch64" ]] || die "Zephyr guest build is currently only supported for qemu aarch64"
                     qemu_build_os_and_rootfs "zephyr" zephyr
                     ;;
+                zephyr-net)
+                    [[ "${ARCH}" == "aarch64" ]] || die "Zephyr VirtIO-net guest build is currently only supported for qemu aarch64"
+                    qemu_build_os_and_rootfs "zephyr-net" zephyr_net
+                    ;;
                 freertos)
                     [[ "${ARCH}" == "aarch64" ]] || die "FreeRTOS guest build is currently only supported for qemu aarch64"
                     qemu_build_os_and_rootfs "freertos" freertos
@@ -635,7 +659,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     qemu_rootfs_clean_outputs
                     ;;
                 *)
-                    die "Unknown os: ${OS} (supported: linux, arceos, zephyr, freertos, all)"
+                    die "Unknown os: ${OS} (supported: linux, arceos, zephyr, zephyr-net, freertos, all)"
                     ;;
             esac
             ;;
