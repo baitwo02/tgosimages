@@ -55,6 +55,8 @@ zephyr_usage() {
     printf '  --cross-compile <prefix>      CROSS_COMPILE prefix\n'
     printf '  --images-dir <dir>            Output image directory override\n'
     printf '  --image-name <name>           Output image base name (default: current command)\n'
+    printf '  --app <path>                  Zephyr application path relative to source tree or absolute\n'
+    printf '  --build-subdir <dir>          Build directory below build/\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/zephyr.sh qemu-aarch64\n'
@@ -94,6 +96,14 @@ zephyr_parse_args() {
                 ;;
             --image-name)
                 ZEPHYR_IMAGE_NAME="$2"
+                shift 2
+                ;;
+            --app)
+                ZEPHYR_APP="$2"
+                shift 2
+                ;;
+            --build-subdir)
+                ZEPHYR_BUILD_SUBDIR="$2"
                 shift 2
                 ;;
             *)
@@ -189,6 +199,10 @@ zephyr_build() {
     local build_dir="${BUILD_DIR}/${ZEPHYR_BUILD_SUBDIR}"
     local source_dir="${ZEPHYR_SRC_DIR}/${ZEPHYR_APP}"
 
+    if [[ "${ZEPHYR_APP}" = /* ]]; then
+        source_dir="${ZEPHYR_APP}"
+    fi
+
     if [[ "${ZEPHYR_ARGS[*]:-}" == *"clean"* ]]; then
         info "Cleaning Zephyr build directory ${build_dir}"
         rm -rf "${build_dir}" "${ZEPHYR_IMAGES_DIR}"
@@ -267,27 +281,27 @@ configure_platform() {
 
     case "${ZEPHYR_PLATFORM}" in
         qemu-aarch64)
-            ZEPHYR_APP="tests/benchmarks/latency_measure"
+            : "${ZEPHYR_APP:=tests/benchmarks/latency_measure}"
             ZEPHYR_BOARD="qemu_cortex_a53"
-            ZEPHYR_BUILD_SUBDIR="zephyr/qemu-aarch64"
+            : "${ZEPHYR_BUILD_SUBDIR:=zephyr/qemu-aarch64}"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/qemu-aarch64/zephyr}"
             ;;
         phytiumpi)
-            ZEPHYR_APP="tests/benchmarks/latency_measure"
+            : "${ZEPHYR_APP:=tests/benchmarks/latency_measure}"
             ZEPHYR_BOARD="phytiumpi_axvisor_guest"
-            ZEPHYR_BUILD_SUBDIR="zephyr/phytiumpi"
+            : "${ZEPHYR_BUILD_SUBDIR:=zephyr/phytiumpi}"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/phytiumpi/zephyr}"
             ;;
         tac-e400-plc)
-            ZEPHYR_APP="tests/benchmarks/latency_measure"
+            : "${ZEPHYR_APP:=tests/benchmarks/latency_measure}"
             ZEPHYR_BOARD="phytiumpi_axvisor_guest"
-            ZEPHYR_BUILD_SUBDIR="zephyr/tac-e400-plc"
+            : "${ZEPHYR_BUILD_SUBDIR:=zephyr/tac-e400-plc}"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/tac-e400-plc/zephyr}"
             ;;
         orangepi-5-plus)
-            ZEPHYR_APP="tests/benchmarks/latency_measure"
+            : "${ZEPHYR_APP:=tests/benchmarks/latency_measure}"
             ZEPHYR_BOARD="orangepi_5_plus_rk3588"
-            ZEPHYR_BUILD_SUBDIR="zephyr/orangepi-5-plus"
+            : "${ZEPHYR_BUILD_SUBDIR:=zephyr/orangepi-5-plus}"
             : "${ZEPHYR_IMAGES_DIR:=${ROOT_DIR}/IMAGES/orangepi/zephyr}"
             ;;
         *)
