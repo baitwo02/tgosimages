@@ -208,7 +208,9 @@ scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 
 - Downloads official Alpine `minirootfs`
 - Verifies the downloaded archive with SHA256
-- Builds and installs LTP syscall tests from `https://github.com/linux-test-project/ltp/releases/download/20260529/ltp-full-20260529.tar.xz` into `/opt/ltp`
+- Builds and installs filtered LTP syscall tests and the complete `testcases/kernel/sched` subtree from `https://github.com/linux-test-project/ltp/releases/download/20260529/ltp-full-20260529.tar.xz` into `/opt/ltp`
+- Includes `/opt/ltp/Version` and executable `/opt/ltp/testcases/bin/hackbench`
+- Packages all scheduler build artifacts, but only `hackbench` is currently verified as a Starry workload
 - Builds LTP inside an Alpine Docker container with `apk add` build dependencies
 - Generates an ext4 rootfs image
 - Currently supports `aarch64`, `loongarch64`, `riscv64`, and `x86_64`

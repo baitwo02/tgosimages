@@ -177,7 +177,7 @@ github_upload() {
         -H "Authorization: token ${GITHUB_TOKEN}" \
         -H "Content-Type: application/octet-stream" \
         -H "Accept: application/vnd.github.v3+json" \
-        --data-binary @"${file_path}")
+        --upload-file "${file_path}")
     status_code=${response: -3}
     response_body=${response:0:${#response}-3}
 

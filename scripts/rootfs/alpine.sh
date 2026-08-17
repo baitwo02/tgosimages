@@ -187,6 +187,7 @@ alpine_usage() {
     printf '  ALPINE_APK_DOCKER_ARCH        Docker architecture used to run apk --root/--arch (default: x86_64)\n'
     printf '  ALPINE_APK_DOCKER_IMAGE       Docker image used to run apk --root/--arch (default: <prefix>-<apk-arch>:<release>)\n'
     printf '  ALPINE_LTP_URL                LTP source archive URL\n'
+    printf '  ALPINE_LTP_PREFIX             LTP installation prefix (default: /opt/ltp)\n'
     printf '  ALPINE_LTP_CFLAGS             Extra CFLAGS for LTP build\n'
     printf '  ALPINE_LTP_LDFLAGS            Extra LDFLAGS for LTP build\n'
     printf '  ALPINE_LTP_FILTER_OUT_DIRS    LTP syscall directories skipped for Alpine/musl builds\n'
@@ -435,7 +436,7 @@ alpine_ltp_prepare_source() {
     printf '%s\n' "${src_dir}"
 }
 
-alpine_install_ltp_syscalls() {
+alpine_install_ltp_tests() {
     local rootfs_dir="$1"
     local ltp_src_dir="${2:-}"
     local host_uid
@@ -451,7 +452,7 @@ alpine_install_ltp_syscalls() {
     ltp_src_dir="${ltp_src_dir:-$(alpine_ltp_prepare_source)}"
 
     if ! command -v docker >/dev/null 2>&1; then
-        die "docker is required to build LTP syscall tests"
+        die "docker is required to build LTP tests"
     fi
 
     if [[ -n "${ALPINE_DOCKER_DNS}" ]]; then
@@ -475,7 +476,7 @@ alpine_install_ltp_syscalls() {
         fi
     done
 
-    info "Installing LTP syscall tests in Docker (${docker_platform}, ${ltp_docker_image})"
+    info "Installing LTP tests in Docker (${docker_platform}, ${ltp_docker_image})"
     docker run --rm \
         "${docker_dns_args[@]}" \
         --platform "${docker_platform}" \
@@ -495,6 +496,8 @@ alpine_install_ltp_syscalls() {
                 make autotools
             fi
             make clean >/dev/null 2>&1 || true
+            rm -rf /tmp/ltp-stage
+            mkdir -p /tmp/ltp-stage
             rm -f include/mk/config.mk include/mk/config-openposix.mk include/mk/features.mk include/config.h config.status
             CFLAGS='${ALPINE_LTP_CFLAGS}' \
             LDFLAGS='${ALPINE_LTP_LDFLAGS}' \
@@ -525,14 +528,26 @@ int main(void){struct sockaddr_alg a; struct af_alg_iv v; return sizeof(a)+sizeo
                 top_srcdir=/ltp \
                 top_builddir=/ltp \
                 FILTER_OUT_DIRS='${ALPINE_LTP_FILTER_OUT_DIRS}' \
-                DESTDIR=/rootfs \
+                DESTDIR=/tmp/ltp-stage \
                 install
-            mkdir -p '/rootfs${ALPINE_LTP_PREFIX}/runtest'
+            make -C testcases/kernel/sched \
+                top_srcdir=/ltp \
+                top_builddir=/ltp
+            make -C testcases/kernel/sched \
+                top_srcdir=/ltp \
+                top_builddir=/ltp \
+                DESTDIR=/tmp/ltp-stage \
+                install
+            install -Dm0644 VERSION '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/Version'
+            mkdir -p '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/runtest'
             if [ -n '${ltp_runtest_filter_pattern}' ]; then
-                grep -v -E '${ltp_runtest_filter_pattern}' runtest/syscalls > '/rootfs${ALPINE_LTP_PREFIX}/runtest/syscalls'
+                grep -v -E '${ltp_runtest_filter_pattern}' runtest/syscalls > '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/runtest/syscalls'
             else
-                cp -f runtest/syscalls '/rootfs${ALPINE_LTP_PREFIX}/runtest/syscalls'
+                cp -f runtest/syscalls '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/runtest/syscalls'
             fi
+            mkdir -p '/rootfs${ALPINE_LTP_PREFIX}'
+            cp -a '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/.' '/rootfs${ALPINE_LTP_PREFIX}/'
+            diff -qr '/tmp/ltp-stage${ALPINE_LTP_PREFIX}' '/rootfs${ALPINE_LTP_PREFIX}'
         "
 }
 
@@ -775,7 +790,7 @@ alpine_create_rootfs() {
         "${rootfs_dir}/etc/apk/repositories"
     alpine_install_default_packages "${rootfs_dir}"
     alpine_write_overlay_files "${rootfs_dir}"
-    alpine_install_ltp_syscalls "${rootfs_dir}"
+    alpine_install_ltp_tests "${rootfs_dir}"
 
     if ! command -v debugfs >/dev/null 2>&1; then
         die "debugfs not found. Please install e2fsprogs"
