@@ -530,6 +530,14 @@ int main(void){struct sockaddr_alg a; struct af_alg_iv v; return sizeof(a)+sizeo
                 FILTER_OUT_DIRS='${ALPINE_LTP_FILTER_OUT_DIRS}' \
                 DESTDIR=/tmp/ltp-stage \
                 install
+            make -C testcases/kernel/ipc/pipeio \
+                top_srcdir=/ltp \
+                top_builddir=/ltp
+            make -C testcases/kernel/ipc/pipeio \
+                top_srcdir=/ltp \
+                top_builddir=/ltp \
+                DESTDIR=/tmp/ltp-stage \
+                install
             make -C testcases/kernel/sched \
                 top_srcdir=/ltp \
                 top_builddir=/ltp
@@ -545,6 +553,7 @@ int main(void){struct sockaddr_alg a; struct af_alg_iv v; return sizeof(a)+sizeo
             else
                 cp -f runtest/syscalls '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/runtest/syscalls'
             fi
+            cp -f runtest/sched '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/runtest/sched'
             mkdir -p '/rootfs${ALPINE_LTP_PREFIX}'
             cp -a '/tmp/ltp-stage${ALPINE_LTP_PREFIX}/.' '/rootfs${ALPINE_LTP_PREFIX}/'
             diff -qr '/tmp/ltp-stage${ALPINE_LTP_PREFIX}' '/rootfs${ALPINE_LTP_PREFIX}'
