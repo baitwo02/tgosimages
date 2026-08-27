@@ -216,6 +216,11 @@ validate_prepared_linux_tree() {
     local required_path
     local kernel_release
 
+    # Refresh generated release metadata with the same suffix policy used by
+    # the external-module build; a previous Kbuild run may have cached '+'.
+    make -C "${LINUX_SRC_DIR}" \
+        ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= prepare
+
     for required_path in \
         .config \
         Module.symvers \
@@ -240,6 +245,8 @@ validate_prepared_linux_tree() {
         ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= kernelrelease)"
     [[ "${kernel_release}" == "${EXPECTED_KERNEL_RELEASE}" ]] \
         || die "Prepared Linux release ${kernel_release} does not match ${EXPECTED_KERNEL_RELEASE}"
+    [[ "$(<"${LINUX_SRC_DIR}/include/config/kernel.release")" == "${EXPECTED_KERNEL_RELEASE}" ]] \
+        || die "Generated Linux kernel.release is stale after prepare"
     LINUX_CONFIG_SHA256="$(sha256sum "${LINUX_SRC_DIR}/.config" | awk '{print $1}')"
     MODULE_SYMVERS_SHA256="$(sha256sum "${LINUX_SRC_DIR}/Module.symvers" | awk '{print $1}')"
 }
