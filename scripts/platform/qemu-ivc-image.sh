@@ -189,20 +189,20 @@ prepare_linux_tree() {
     if [[ "${LINUX_SKIP_CHECKOUT}" == "0" ]]; then
         info "Preparing Linux Kbuild metadata for ${EXPECTED_KERNEL_RELEASE}"
         make -C "${LINUX_SRC_DIR}" \
-            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" mrproper
+            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= mrproper
         make -C "${LINUX_SRC_DIR}" \
-            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" defconfig
+            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= defconfig
         "${LINUX_SRC_DIR}/scripts/config" --file "${LINUX_SRC_DIR}/.config" \
             --enable NVME_CORE \
             --enable BLK_DEV_NVME \
             --set-str LOCALVERSION "-g74fe02ce122a-dirty" \
             --disable LOCALVERSION_AUTO
         make -C "${LINUX_SRC_DIR}" \
-            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" olddefconfig
+            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= olddefconfig
         make -C "${LINUX_SRC_DIR}" \
-            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" modules_prepare
+            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= modules_prepare
         make -C "${LINUX_SRC_DIR}" -j"${IVC_IMAGE_JOBS}" \
-            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" vmlinux
+            ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= vmlinux
         copy_required \
             "${LINUX_SRC_DIR}/vmlinux.symvers" \
             "${LINUX_SRC_DIR}/Module.symvers"
@@ -234,8 +234,10 @@ validate_prepared_linux_tree() {
     grep -qx 'CONFIG_BLK_DEV_NVME=y' "${LINUX_SRC_DIR}/.config" \
         || die "Prepared Linux config does not include built-in NVMe support"
 
+    # The frozen release already contains the source suffix. Passing an empty
+    # LOCALVERSION suppresses the extra '+' that Git adds for untagged commits.
     kernel_release="$(make -s -C "${LINUX_SRC_DIR}" \
-        ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" kernelrelease)"
+        ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= kernelrelease)"
     [[ "${kernel_release}" == "${EXPECTED_KERNEL_RELEASE}" ]] \
         || die "Prepared Linux release ${kernel_release} does not match ${EXPECTED_KERNEL_RELEASE}"
     LINUX_CONFIG_SHA256="$(sha256sum "${LINUX_SRC_DIR}/.config" | awk '{print $1}')"
@@ -259,7 +261,8 @@ build_linux_ivc_artifacts() {
     make -C "${ivc_dir}" kernel-module \
         ARCH=arm64 \
         CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" \
-        KDIR="${LINUX_SRC_DIR}"
+        KDIR="${LINUX_SRC_DIR}" \
+        LOCALVERSION=
 
     MODULE_PATH="${ivc_dir}/kernel_driver/axvisor.ko"
     LINUX_PUBLISH_PATH="${ivc_dir}/build/demo/publish"
