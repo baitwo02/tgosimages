@@ -1,0 +1,10 @@
+# Immutable registry for the AxVisor IVC Message V1 E2E image.
+
+[[images]]
+name = "rootfs-aarch64-alpine-ivc-message-v1.img"
+version = "0.0.12-ivc-message-v1-3ce6ae8a"
+description = "Alpine rootfs for AxVisor aarch64 IVC Message V1 E2E"
+sha256 = "cce2de84478cb475bcb95bf64dcb7941848e5e11c859f08000497098783d5690"
+arch = "aarch64"
+url = "https://github.com/baitwo02/tgosimages/releases/download/ivc-message-v1-3ce6ae8a/rootfs-aarch64-alpine-ivc-message-v1.img.tar.xz"
+released_at = "2026-08-27T16:56:42Z"
