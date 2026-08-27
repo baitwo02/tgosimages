@@ -329,7 +329,7 @@ build_arceos_ivc_artifacts() {
     for package in arceos-ivc-publisher arceos-ivc-subscriber; do
         config_path="${config_dir}/${package}.toml"
         cat > "${config_path}" <<'CONFIG'
-features = ["arceos"]
+features = ["arceos", "ax-std/std-compat", "ax-std/tls"]
 log = "Warn"
 CONFIG
         ARCEOS_REPO_URL="${ARCEOS_REPO_URL}" \
