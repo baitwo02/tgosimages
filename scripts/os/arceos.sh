@@ -134,16 +134,55 @@ arceos_parse_args() {
     done
 }
 
-arceos_artifact_target_dir() {
+arceos_build_artifact_requires_bin() {
     local target="$1"
 
-    case "${target}" in
-        aarch64-*) printf 'aarch64-unknown-linux-musl' ;;
-        riscv64*) printf 'riscv64gc-unknown-linux-musl' ;;
-        loongarch64-*) printf 'loongarch64-unknown-linux-musl' ;;
-        x86_64-*) printf 'x86_64-unknown-linux-musl' ;;
-        *) printf '%s' "${target}" ;;
-    esac
+    [[ "${target}" == aarch64-* || "${target}" == riscv64* ]]
+}
+
+arceos_objcopy_binary() {
+    local elf_path="$1"
+    local bin_path="$2"
+    local objcopy=""
+
+    if command -v llvm-objcopy >/dev/null 2>&1; then
+        objcopy=llvm-objcopy
+    elif command -v rust-objcopy >/dev/null 2>&1; then
+        objcopy=rust-objcopy
+    else
+        die "Missing ELF-to-binary conversion tool: llvm-objcopy or rust-objcopy"
+    fi
+
+    rm -f "${bin_path}"
+    "${objcopy}" -O binary "${elf_path}" "${bin_path}" \
+        || die "Failed to convert ArceOS ELF to binary: ${elf_path}"
+    [[ -s "${bin_path}" ]] || die "ArceOS binary artifact is empty: ${bin_path}"
+}
+
+arceos_built_elf_from_log() {
+    local build_log="$1"
+    local elf_path
+
+    elf_path="$(sed -n 's/^\[axbuild\] cargo build elf=\(.*\)$/\1/p' "${build_log}" | tail -n 1)"
+    [[ -n "${elf_path}" ]] \
+        || die "cargo arceos build did not report an ELF artifact"
+    [[ -f "${elf_path}" ]] || die "Reported ArceOS ELF artifact not found: ${elf_path}"
+    printf '%s\n' "${elf_path}"
+}
+
+arceos_install_build_artifact() {
+    local build_target="$1"
+    local elf_path="$2"
+    local output_path="${ARCEOS_IMAGES_DIR}/${ARCEOS_IMAGE_NAME}"
+
+    mkdir -p "${ARCEOS_IMAGES_DIR}"
+    if [[ "${ARCEOS_IMAGE_NAME}" == *.bin ]] || arceos_build_artifact_requires_bin "${build_target}"; then
+        info "Converting build artifact: ${elf_path} -> ${output_path}"
+        arceos_objcopy_binary "${elf_path}" "${output_path}"
+    else
+        info "Copying build artifact: ${elf_path} -> ${output_path}"
+        cp "${elf_path}" "${output_path}"
+    fi
 }
 
 arceos_build() {
@@ -172,6 +211,8 @@ arceos_build() {
         build_cmd+=("${extra_args[@]}")
     fi
 
+    local built_elf=""
+
     if [[ -d "$ARCEOS_SRC_DIR" ]]; then
         pushd "$ARCEOS_SRC_DIR" >/dev/null
 
@@ -183,31 +224,25 @@ arceos_build() {
         fi
 
         info "EXEC: ${build_cmd[*]}"
-        "${build_cmd[@]}"
+        if [[ "${ARCEOS_ARGS}" == *"clean"* ]]; then
+            "${build_cmd[@]}"
+        else
+            local build_log
+            build_log="$(mktemp)"
+            if ! "${build_cmd[@]}" 2>&1 | tee "${build_log}"; then
+                rm -f "${build_log}"
+                die "ArceOS build failed: ${ARCEOS_PACKAGE}"
+            fi
+            built_elf="$(arceos_built_elf_from_log "${build_log}")"
+            rm -f "${build_log}"
+        fi
 
         popd >/dev/null
     fi
 
     if [[ "${ARCEOS_ARGS}" != *"clean"* ]]; then
-        local bin_path="$ARCEOS_SRC_DIR/target/$build_target/release/${ARCEOS_PACKAGE}.bin"
-        if [[ ! -f "$bin_path" ]]; then
-            local artifact_target
-            artifact_target="$(arceos_artifact_target_dir "${build_target}")"
-            bin_path="$ARCEOS_SRC_DIR/target/$artifact_target/release/${ARCEOS_PACKAGE}.bin"
-        fi
-        if [[ ! -f "$bin_path" ]]; then
-            # x86_64 target does not produce .bin, use ELF directly
-            bin_path="$ARCEOS_SRC_DIR/target/$build_target/release/${ARCEOS_PACKAGE}"
-        fi
-        if [[ ! -f "$bin_path" ]]; then
-            local artifact_target
-            artifact_target="$(arceos_artifact_target_dir "${build_target}")"
-            bin_path="$ARCEOS_SRC_DIR/target/$artifact_target/release/${ARCEOS_PACKAGE}"
-        fi
-        [[ -f "$bin_path" ]] || die "ArceOS build artifact not found: $bin_path"
-        info "Copying build artifacts: $bin_path -> $ARCEOS_IMAGES_DIR/$ARCEOS_IMAGE_NAME"
-        mkdir -p "${ARCEOS_IMAGES_DIR}"
-        cp "$bin_path" "${ARCEOS_IMAGES_DIR}/$ARCEOS_IMAGE_NAME"
+        [[ -n "${built_elf}" ]] || die "ArceOS build artifact was not produced: ${ARCEOS_PACKAGE}"
+        arceos_install_build_artifact "${build_target}" "${built_elf}"
     else
         info "Cleaning build artifacts in $ARCEOS_IMAGES_DIR"
         rm -rf "${ARCEOS_IMAGES_DIR}" || true
