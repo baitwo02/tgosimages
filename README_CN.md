@@ -46,6 +46,7 @@
 | `scripts/platform/rdk-s100p.sh` | 构建 RDK-S100P 客户机镜像 |
 | `scripts/platform/bst-a1000.sh` | 构建 BST-A1000 客户机镜像 |
 | `scripts/platform/qemu.sh` | 构建 QEMU 客户机镜像，并在需要时串联 rootfs 生成流程 |
+| `scripts/platform/qemu-ivc-image.sh` | 重建、校验并打包 AArch64 IVC Message V1 专用 rootfs |
 
 ### 通用 OS 构建器
 
@@ -164,6 +165,8 @@ sudo apt install \
 ./build.sh platform qemu all
 ./build.sh platform qemu-aarch64 linux
 ./build.sh platform qemu all --rootfs busybox,alpine,debian
+./build.sh platform qemu-aarch64 ivc-image \
+  --base-rootfs-archive build/image-cache/rootfs-aarch64-alpine.img.tar.xz
 
 # Orange Pi 5 Plus StarryOS 客户机内核
 ./build.sh platform orangepi-5-plus starry
@@ -195,6 +198,35 @@ scripts/rootfs/alpine.sh x86_64 --img-size 2G
 scripts/rootfs/debian.sh riscv64 --debian trixie --out_dir IMAGES/rootfs
 scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 ```
+
+## IVC Message V1 专用镜像
+
+`ivc-image` 是唯一会注入 Linux 与 ArceOS IVC 产物的镜像入口。它会校验
+官方 v0.0.12 基础归档、重建 axvisor-tools host regression tests、静态
+Linux demo 与 kernel module，从固定 TGOSKits feature commit 构建两个
+ArceOS guest，注入并逐字节回读五个产物，校验 module vermagic，执行
+`e2fsck -fn`，最后在 `release/` 下生成归档、checksum 与 build-info。
+
+本地源码模式必须同时声明目录、skip-checkout 开关和精确 commit；目录必须
+是 clean Git 根目录，不能是另一个 checkout 下的普通子目录：
+
+```bash
+AXVISOR_TOOLS_SRC_DIR=/path/to/axvisor-tools \
+AXVISOR_TOOLS_SKIP_CHECKOUT=1 \
+AXVISOR_TOOLS_REF=<exact-commit> \
+ARCEOS_SRC_DIR=/path/to/tgoskits \
+ARCEOS_SKIP_CHECKOUT=1 \
+ARCEOS_REF=<exact-feature-commit> \
+LINUX_SRC_DIR=/path/to/prepared-linux \
+LINUX_SKIP_CHECKOUT=1 \
+LINUX_REF=74fe02ce122a6103f207d29fafc8b3a53de6abaf \
+./build.sh platform qemu-aarch64 ivc-image \
+  --base-rootfs-archive /path/to/rootfs-aarch64-alpine.img.tar.xz
+```
+
+Linux 本地源码树还必须具备匹配的 `.config`、generated headers、
+`Module.symvers`、`scripts/module.lds` 与 `scripts/mod/modpost`。不启用
+`LINUX_SKIP_CHECKOUT=1` 时，构建入口会从冻结 Linux commit 准备这些元数据。
 
 ## Rootfs 说明
 

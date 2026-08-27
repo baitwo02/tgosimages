@@ -61,6 +61,7 @@ usage() {
     printf '%s\n' "  $0 platform qemu                 # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64          # show qemu help"
     printf '%s\n' "  $0 platform qemu-aarch64 linux    # build linux with default rootfs"
+    printf '%s\n' "  $0 platform qemu-aarch64 ivc-image --base-rootfs-archive <archive>"
     printf '%s\n' "  $0 platform qemu-loongarch64 linux # build LoongArch64 linux with default rootfs"
     printf '%s\n' "  $0 platform qemu all              # build all qemu architectures with default rootfs"
     printf '%s\n' "  $0 platform qemu all --rootfs alpine,debian"
@@ -246,7 +247,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         qemu_cmd="${target#qemu-}"
                     fi
                     export QEMU_ARCH="${qemu_cmd}"
-                    if [[ "$qemu_cmd" != "all" ]] && ! has_rootfs_override "${qemu_args[@]}"; then
+                    if [[ "$qemu_cmd" != "all" && "${qemu_args[0]:-}" != "ivc-image" ]] \
+                        && ! has_rootfs_override "${qemu_args[@]}"; then
                         if [[ "$qemu_cmd" == "loongarch64" ]]; then
                             qemu_args+=(--rootfs "busybox,alpine")
                         else

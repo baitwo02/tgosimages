@@ -46,6 +46,7 @@ These scripts are the main entry points for platform-oriented builds. They usual
 | `scripts/platform/rdk-s100p.sh` | Build RDK-S100P guest images |
 | `scripts/platform/bst-a1000.sh` | Build BST-A1000 guest images |
 | `scripts/platform/qemu.sh` | Build QEMU guest images and invoke rootfs generation when needed |
+| `scripts/platform/qemu-ivc-image.sh` | Rebuild, validate, and package the dedicated AArch64 IVC Message V1 rootfs |
 
 ### Common OS Builders
 
@@ -164,6 +165,8 @@ Some platform builds require:
 ./build.sh platform qemu all
 ./build.sh platform qemu-aarch64 linux
 ./build.sh platform qemu all --rootfs busybox,alpine,debian
+./build.sh platform qemu-aarch64 ivc-image \
+  --base-rootfs-archive build/image-cache/rootfs-aarch64-alpine.img.tar.xz
 
 # Orange Pi 5 Plus StarryOS guest kernel
 ./build.sh platform orangepi-5-plus starry
@@ -195,6 +198,38 @@ scripts/rootfs/alpine.sh x86_64 --img-size 2G
 scripts/rootfs/debian.sh riscv64 --debian trixie --out_dir IMAGES/rootfs
 scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 ```
+
+## Dedicated IVC Message V1 Image
+
+The `ivc-image` target is the only image flow that injects Linux and ArceOS IVC
+artifacts. It verifies the official v0.0.12 base archive checksum, rebuilds the
+axvisor-tools host regressions, static Linux demos and kernel module, builds both
+ArceOS guests from an exact tgoskits feature commit, injects all five artifacts,
+reads them back byte-for-byte, checks module vermagic, runs `e2fsck -fn`, and
+creates the archive, checksum, and build information under `release/`.
+
+Every source ref must be an exact commit. For local development, set each source
+directory together with its skip-checkout flag; the builder rejects a nested,
+dirty, or wrong-head checkout:
+
+```bash
+AXVISOR_TOOLS_SRC_DIR=/path/to/axvisor-tools \
+AXVISOR_TOOLS_SKIP_CHECKOUT=1 \
+AXVISOR_TOOLS_REF=<exact-commit> \
+ARCEOS_SRC_DIR=/path/to/tgoskits \
+ARCEOS_SKIP_CHECKOUT=1 \
+ARCEOS_REF=<exact-feature-commit> \
+LINUX_SRC_DIR=/path/to/prepared-linux \
+LINUX_SKIP_CHECKOUT=1 \
+LINUX_REF=74fe02ce122a6103f207d29fafc8b3a53de6abaf \
+./build.sh platform qemu-aarch64 ivc-image \
+  --base-rootfs-archive /path/to/rootfs-aarch64-alpine.img.tar.xz
+```
+
+The Linux source must be a clean Git root and already contain the matching
+`.config`, generated headers, `Module.symvers`, `scripts/module.lds`, and
+`scripts/mod/modpost`. Without `LINUX_SKIP_CHECKOUT=1`, the target prepares that
+Kbuild metadata from the frozen Linux commit.
 
 ## Rootfs Notes
 

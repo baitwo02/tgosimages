@@ -12,6 +12,7 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 ARCEOS_REPO_URL="${ARCEOS_REPO_URL:-https://github.com/rcore-os/tgoskits.git}"
 ARCEOS_REF="${ARCEOS_REF:-2703515cd40f753a205f2b7c26d44cd1b44853b8}"
 ARCEOS_SRC_DIR="${ARCEOS_SRC_DIR:-${BUILD_DIR}/tgoskits}"
+ARCEOS_SKIP_CHECKOUT="${ARCEOS_SKIP_CHECKOUT:-0}"
 ARCEOS_PATCH_DIR="${ARCEOS_PATCH_DIR:-${ROOT_DIR}/patches/arceos}"
 
 # Global variables for parsed arguments
@@ -82,6 +83,7 @@ arceos_usage() {
     printf '  ARCEOS_REPO_URL               tgoskits repository URL\n'
     printf '  ARCEOS_REF                    tgoskits git commit/ref\n'
     printf '  ARCEOS_SRC_DIR                tgoskits source directory\n'
+    printf '  ARCEOS_SKIP_CHECKOUT          require and use an exact clean local checkout (0 or 1)\n'
     printf '  ARCEOS_PATCH_DIR              ArceOS patch directory\n'
     printf '\n'
     printf 'Examples:\n'
@@ -214,14 +216,19 @@ arceos_build() {
 
 arceos() {
     if [[ "${ARCEOS_ARGS}" != *"clean"* ]]; then
-        info "Cloning tgoskits source repository $ARCEOS_REPO_URL -> $ARCEOS_SRC_DIR"
-        clone_repository "$ARCEOS_REPO_URL" "$ARCEOS_SRC_DIR"
-        info "Checking out tgoskits ref ${ARCEOS_REF}"
-        checkout_ref "$ARCEOS_SRC_DIR" "$ARCEOS_REF"
+        if [[ "${ARCEOS_SKIP_CHECKOUT}" == "1" ]]; then
+            require_clean_exact_git_checkout "ArceOS" "$ARCEOS_SRC_DIR" "$ARCEOS_REF"
+            info "Using exact local tgoskits checkout: $ARCEOS_SRC_DIR"
+        else
+            info "Cloning tgoskits source repository $ARCEOS_REPO_URL -> $ARCEOS_SRC_DIR"
+            clone_repository "$ARCEOS_REPO_URL" "$ARCEOS_SRC_DIR"
+            info "Checking out tgoskits ref ${ARCEOS_REF}"
+            checkout_ref "$ARCEOS_SRC_DIR" "$ARCEOS_REF"
 
-        if [[ -d "$ARCEOS_PATCH_DIR" ]]; then
-            info "Applying patches..."
-            apply_patches "$ARCEOS_PATCH_DIR" "$ARCEOS_SRC_DIR"
+            if [[ -d "$ARCEOS_PATCH_DIR" ]]; then
+                info "Applying patches..."
+                apply_patches "$ARCEOS_PATCH_DIR" "$ARCEOS_SRC_DIR"
+            fi
         fi
     fi
 

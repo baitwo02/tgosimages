@@ -129,6 +129,34 @@ copy_optional() {
     fi
 }
 
+require_clean_exact_git_checkout() {
+    local label="$1"
+    local source_dir="$2"
+    local expected_commit="$3"
+    local source_root
+    local actual_commit
+    local dirty_status
+
+    [[ "${expected_commit}" =~ ^[0-9a-f]{40}$ ]] \
+        || die "${label} ref must be an exact 40-character commit: ${expected_commit}"
+    [[ -d "${source_dir}" ]] || die "${label} source directory not found: ${source_dir}"
+
+    source_root="$(git -C "${source_dir}" rev-parse --show-toplevel 2>/dev/null)" \
+        || die "${label} source directory is not a Git checkout: ${source_dir}"
+    source_root="$(cd "${source_root}" && pwd -P)"
+    source_dir="$(cd "${source_dir}" && pwd -P)"
+    [[ "${source_root}" == "${source_dir}" ]] \
+        || die "${label} source directory is nested in another checkout: ${source_dir}"
+
+    actual_commit="$(git -C "${source_dir}" rev-parse HEAD)"
+    [[ "${actual_commit}" == "${expected_commit}" ]] \
+        || die "${label} checkout is at ${actual_commit}, expected ${expected_commit}"
+
+    dirty_status="$(git -C "${source_dir}" status --porcelain --untracked-files=normal --ignore-submodules=none)"
+    [[ -z "${dirty_status}" ]] \
+        || die "${label} checkout must be clean before an exact-source build: ${source_dir}"
+}
+
 run_parallel_functions() {
     local action="$1"
     shift
