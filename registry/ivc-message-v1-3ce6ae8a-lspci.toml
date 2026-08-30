@@ -1,0 +1,12 @@
+# Registry for the pciutils-enabled AxVisor aarch64 guest image.
+# Used by the qemu-ivshmem-pci case, which proves Linux PCI enumeration
+# inside the guest with the standard pciutils lspci tool.
+
+[[images]]
+name = "rootfs-aarch64-alpine-ivc-message-v1.img"
+version = "0.0.12-ivc-message-v1-3ce6ae8a-lspci"
+description = "Alpine rootfs for AxVisor aarch64 with pciutils (lspci)"
+sha256 = "dea52d2f2bf7edc79d7a19955cc6ceb04303cd3ce7d2bb86eb21dcf7863d23f2"
+arch = "aarch64"
+url = "https://github.com/baitwo02/tgosimages/releases/download/ivc-message-v1-3ce6ae8a-lspci/rootfs-aarch64-alpine-ivc-message-v1.img.tar.xz"
+released_at = "2026-08-30T00:00:00Z"
