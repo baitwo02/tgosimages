@@ -29,7 +29,9 @@ ZEPHYR_IMAGE_NAME=""
 ZEPHYR_BIN_NAME=""
 ZEPHYR_ELF_NAME=""
 ZEPHYR_DTB_NAME=""
+ZEPHYR_APP_OVERRIDE="${ZEPHYR_APP_OVERRIDE:-}"
 ZEPHYR_ARGS=()
+ZEPHYR_EXTRA_MODULES=()
 
 zephyr_usage() {
     printf 'Zephyr build script for AxVisor guest images\n'
@@ -55,6 +57,8 @@ zephyr_usage() {
     printf '  --cross-compile <prefix>      CROSS_COMPILE prefix\n'
     printf '  --images-dir <dir>            Output image directory override\n'
     printf '  --image-name <name>           Output image base name (default: current command)\n'
+    printf '  --app <path>                  Zephyr source-relative or absolute application path\n'
+    printf '  --extra-module <path>         Add an external Zephyr module (repeatable)\n'
     printf '\n'
     printf 'Examples:\n'
     printf '  scripts/zephyr.sh qemu-aarch64\n'
@@ -94,6 +98,14 @@ zephyr_parse_args() {
                 ;;
             --image-name)
                 ZEPHYR_IMAGE_NAME="$2"
+                shift 2
+                ;;
+            --app)
+                ZEPHYR_APP_OVERRIDE="$2"
+                shift 2
+                ;;
+            --extra-module)
+                ZEPHYR_EXTRA_MODULES+=("$2")
                 shift 2
                 ;;
             *)
@@ -187,7 +199,12 @@ prepare_module_metadata() {
 
 zephyr_build() {
     local build_dir="${BUILD_DIR}/${ZEPHYR_BUILD_SUBDIR}"
-    local source_dir="${ZEPHYR_SRC_DIR}/${ZEPHYR_APP}"
+    local source_dir
+    if [[ "${ZEPHYR_APP}" == /* ]]; then
+        source_dir="${ZEPHYR_APP}"
+    else
+        source_dir="${ZEPHYR_SRC_DIR}/${ZEPHYR_APP}"
+    fi
 
     if [[ "${ZEPHYR_ARGS[*]:-}" == *"clean"* ]]; then
         info "Cleaning Zephyr build directory ${build_dir}"
@@ -233,6 +250,12 @@ zephyr_build() {
 
     if [[ -n "${ZEPHYR_BOARD_ROOT}" ]]; then
         cmake_args+=("-DBOARD_ROOT=${ZEPHYR_BOARD_ROOT}")
+    fi
+
+    if (( ${#ZEPHYR_EXTRA_MODULES[@]} > 0 )); then
+        local module_list
+        module_list=$(IFS=';'; echo "${ZEPHYR_EXTRA_MODULES[*]}")
+        cmake_args+=("-DZEPHYR_EXTRA_MODULES=${module_list}")
     fi
 
     if (( ${#ZEPHYR_ARGS[@]} > 0 )); then
@@ -294,6 +317,11 @@ configure_platform() {
             die "Unknown Zephyr platform: ${ZEPHYR_PLATFORM}"
             ;;
     esac
+
+    if [[ -n "${ZEPHYR_APP_OVERRIDE}" ]]; then
+        ZEPHYR_APP="${ZEPHYR_APP_OVERRIDE}"
+        ZEPHYR_BUILD_SUBDIR="${ZEPHYR_BUILD_SUBDIR}-$(basename "${ZEPHYR_APP}")"
+    fi
 
     ZEPHYR_BIN_NAME="${ZEPHYR_IMAGE_NAME}"
     ZEPHYR_ELF_NAME="${ZEPHYR_IMAGE_NAME}.elf"

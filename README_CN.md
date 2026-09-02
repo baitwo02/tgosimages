@@ -22,6 +22,7 @@
 | `run.sh` | QEMU Linux 镜像的快速启动辅助脚本 |
 | `scripts/platform/` | 各平台入口脚本，如 Phytium Pi、QEMU、Orange Pi 等 |
 | `scripts/os/` | 通用 OS 构建器，如 ArceOS、StarryOS、Zephyr、FreeRTOS 和 RT-Thread |
+| `scripts/apps/` | 使用 TGOSImages 工具链构建外部仓库应用的入口及中文说明 |
 | `scripts/rootfs/` | BusyBox、Alpine、Debian 根文件系统生成脚本 |
 | `scripts/tools/` | 打包、发布及其他辅助工具 |
 | `scripts/lib/` | 共享 shell 工具函数 |
@@ -58,6 +59,9 @@
 | `scripts/os/zephyr.sh` | 通用 Zephyr 构建器 |
 | `scripts/os/freertos.sh` | 通用 FreeRTOS 构建器 |
 | `scripts/os/rtthread.sh` | 通用 RT-Thread 构建器 |
+
+外部应用入口的使用方法见 `scripts/apps/README.md`。当前包含 AKA RK3588 Zephyr 机器人
+控制应用构建入口。
 
 ### Rootfs 生成脚本
 
