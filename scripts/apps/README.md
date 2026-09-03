@@ -2,16 +2,20 @@
 
 本目录存放“业务应用属于其他仓库、系统构建环境属于 TGOSImages”场景的薄封装脚本。
 
-当前包含 AKA RK3588 Zephyr 机器人控制应用入口：
+当前包含两个外部应用入口：
 
 ```text
 scripts/apps/aka-rk3588-zephyr.sh
+scripts/apps/ivc-rk3588.sh
 ```
 
-它查找 AKA 中的控制应用，然后调用 `scripts/os/zephyr.sh`，使用本仓库管理的 Zephyr
+`aka-rk3588-zephyr.sh` 查找 AKA 中的控制应用，然后调用 `scripts/os/zephyr.sh`，使用本仓库管理的 Zephyr
 版本、补丁、交叉工具链和 Orange Pi 5 Plus board 配置生成客户机镜像。
 
-本脚本不复制机器人源码，也不负责修改 TGOSKits、部署镜像、启动 AxVisor 或运行板端
+`ivc-rk3588.sh` 查找或下载 `ivc-sdk`，构建 Zephyr IVC demo/benchmark 客户机镜像、
+Starry 用户态程序和 StarryOS 客户机镜像，并把板端需要的文件收集到 Orange Pi 发布目录。
+
+本目录脚本不复制业务源码，也不负责修改 TGOSKits、部署镜像、启动 AxVisor 或运行板端
 程序。
 
 ---
@@ -30,7 +34,8 @@ axvisor_two/
 ├── ivc-sdk/                              # Starry/Zephyr 共用 AXIVC SDK
 └── tgosimages/
     ├── scripts/os/zephyr.sh                # 通用 Zephyr 构建器
-    ├── scripts/apps/aka-rk3588-zephyr.sh   # 本入口
+    ├── scripts/apps/aka-rk3588-zephyr.sh   # AKA Zephyr 入口
+    ├── scripts/apps/ivc-rk3588.sh          # AXIVC demo/benchmark 入口
     ├── patches/zephyr/                     # Zephyr 补丁
     ├── build/                              # Zephyr 源码、SDK、构建缓存
     └── IMAGES/                             # 最终镜像
@@ -275,6 +280,78 @@ cd /path/axvisor_two/aka-rk3588
 
 ```bash
 ./scripts/os/zephyr.sh --help
+```
+
+### 3.6 构建 AXIVC demo 和 benchmark
+
+Orange Pi 5 Plus 上的 Zephyr-Starry IVC 测例使用：
+
+```bash
+cd /path/axvisor_two/tgosimages
+./build.sh platform orangepi-5-plus ivc
+```
+
+也可以直接调用薄封装脚本：
+
+```bash
+./scripts/apps/ivc-rk3588.sh
+```
+
+若希望构建 Orange Pi 5 Plus 平台相关的全部镜像和 IVC payload，可以省略子命令：
+
+```bash
+./build.sh platform orangepi-5-plus
+```
+
+默认行为：
+
+- `ivc-sdk` 优先使用同级 `../ivc-sdk`；不存在时 clone `https://github.com/rcore-os/ivc-sdk.git`。
+- StarryOS 使用远端 `https://github.com/rcore-os/tgoskits.git` 的 `dev` 分支，不使用同级本地
+  `tgoskits`。
+- StarryOS 日志级别默认为 `Error`。
+- Zephyr demo application 为 `ivc-sdk/samples/zephyr-starry`。
+- Zephyr benchmark application 为 `ivc-sdk/samples/zephyr-starry-benchmark`。
+- Starry 用户态程序由 `ivc-sdk` 的 Makefile 构建。
+
+常用覆盖参数：
+
+```bash
+./build.sh platform orangepi-5-plus ivc \
+  --ivc-sdk-dir /path/to/ivc-sdk \
+  --tgoskits-ref dev \
+  --starry-log Error
+```
+
+发布目录会生成以下板端 payload：
+
+```text
+IMAGES/orangepi/ivc/guest/starry/orangepi-5-plus
+IMAGES/orangepi/ivc/guest/zephyr/zephyr-ivc-demo.bin
+IMAGES/orangepi/ivc/guest/zephyr/zephyr-ivc-benchmark.bin
+IMAGES/orangepi/ivc/usr/bin/ivc-demo
+IMAGES/orangepi/ivc/usr/bin/ivc-starry-bench
+IMAGES/orangepi/ivc/usr/lib/libaxivc.so
+```
+
+其中 `zephyr-ivc-*` 是板端使用的 Zephyr IVC 镜像文件名。Zephyr 的 ELF/DTB 等调试产物
+保留在 `build/ivc-rk3588/zephyr`，不会进入发布 payload。
+
+构建完成后可以生成发布包：
+
+```bash
+./build.sh release pack
+```
+
+默认 release 打包入口是 `IMAGES/`，因此 `release/orangepi.tar.xz` 会包含整个
+`IMAGES/orangepi`，也就包含上面的 `ivc/guest` 和 `ivc/usr` 文件。只使用发布包部署 IVC 测例时，可先
+解包，再把包内 rootfs 内容同步到开发板：
+
+```bash
+mkdir -p /tmp/tgosimages-orangepi
+tar -xJf release/orangepi.tar.xz -C /tmp/tgosimages-orangepi
+tar -C /tmp/tgosimages-orangepi/ivc -cf - . \
+  | sshpass -p root ssh -o StrictHostKeyChecking=no root@10.3.10.35 \
+      'tar -C / -xf - && sync'
 ```
 
 ---
