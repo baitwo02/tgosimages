@@ -15,7 +15,9 @@ STARRY_IMAGES_DIR="${ROOT_DIR}/IMAGES/starry"
 STARRY_RELEASE_IMAGES_DIR="${ROOT_DIR}/IMAGES/orangepi-5-plus-starry"
 STARRY_IMAGE_NAME="orangepi-5-plus"
 STARRY_CONFIG="os/StarryOS/configs/board/orangepi-5-plus.toml"
+STARRY_LOG="${STARRY_LOG:-}"
 STARRY_ARGS=()
+STARRY_TEMP_CONFIG=""
 
 starry_usage() {
     cat <<'EOF'
@@ -33,6 +35,7 @@ Options:
   --images-dir <dir>           guest-layout output directory
   --release-images-dir <dir>   independent release staging directory
   --image-name <name>          output image name
+  --log <level>                temporary log level override for this build
 
 Unknown options are passed to `cargo xtask starry build`.
 EOF
@@ -69,6 +72,10 @@ starry_parse_args() {
                 STARRY_IMAGE_NAME="$2"
                 shift 2
                 ;;
+            --log)
+                STARRY_LOG="$2"
+                shift 2
+                ;;
             *)
                 STARRY_ARGS+=("$1")
                 shift
@@ -100,26 +107,70 @@ build_config = "${STARRY_CONFIG}"
 EOF
 }
 
+starry_checkout_source_ref() {
+    case "${STARRY_REF}" in
+        dev)
+            info "Fetching latest tgoskits dev branch"
+            git -C "${STARRY_SRC_DIR}" fetch --quiet --no-tags --depth=1 origin dev
+            git -C "${STARRY_SRC_DIR}" checkout --quiet --detach FETCH_HEAD
+            ;;
+        *)
+            info "Fetching tgoskits ref ${STARRY_REF}"
+            git -C "${STARRY_SRC_DIR}" fetch --quiet --no-tags --depth=1 origin "${STARRY_REF}"
+            git -C "${STARRY_SRC_DIR}" checkout --quiet --detach FETCH_HEAD
+            ;;
+    esac
+    rm -rf -- "${STARRY_SRC_DIR}/.patch_stamps"
+}
+
+starry_config_for_build() {
+    local config_path="$1"
+    local rel_config
+
+    if [[ -z "${STARRY_LOG}" ]]; then
+        printf '%s\n' "${STARRY_CONFIG}"
+        return 0
+    fi
+
+    rel_config=".tgosimages-starry-$(basename -- "${config_path}")"
+    STARRY_TEMP_CONFIG="${STARRY_SRC_DIR}/${rel_config}"
+    awk -v level="${STARRY_LOG}" '
+        BEGIN { replaced = 0 }
+        /^[[:space:]]*log[[:space:]]*=/ {
+            print "log = \"" level "\"";
+            replaced = 1;
+            next;
+        }
+        { print }
+        END {
+            if (!replaced)
+                print "log = \"" level "\"";
+        }
+    ' "${config_path}" > "${STARRY_TEMP_CONFIG}"
+    printf '%s\n' "${rel_config}"
+}
+
 starry_build() {
     local config_path
+    local build_config
     local artifact_path
     local artifact_candidate
     local source_commit
     local build_cmd
 
     clone_repository "${STARRY_REPO_URL}" "${STARRY_SRC_DIR}"
-    if [[ "${STARRY_REF}" == "dev" ]]; then
-        info "Fetching latest tgoskits dev branch"
-        git -C "${STARRY_SRC_DIR}" fetch --quiet --no-tags --depth=1 origin dev
-        checkout_ref "${STARRY_SRC_DIR}" FETCH_HEAD
+    if git -C "${STARRY_SRC_DIR}" remote get-url origin >/dev/null 2>&1; then
+        git -C "${STARRY_SRC_DIR}" remote set-url origin "${STARRY_REPO_URL}"
     else
-        checkout_ref "${STARRY_SRC_DIR}" "${STARRY_REF}"
+        git -C "${STARRY_SRC_DIR}" remote add origin "${STARRY_REPO_URL}"
     fi
+    starry_checkout_source_ref
 
     config_path="${STARRY_SRC_DIR}/${STARRY_CONFIG}"
     [[ -f "${config_path}" ]] || die "StarryOS build config not found: ${config_path}"
+    build_config="$(starry_config_for_build "${config_path}")"
 
-    build_cmd=(cargo xtask starry build -c "${STARRY_CONFIG}")
+    build_cmd=(cargo xtask starry build -c "${build_config}")
     build_cmd+=("${STARRY_ARGS[@]}")
     info "Building StarryOS from ${STARRY_REF}"
     info "EXEC: ${build_cmd[*]}"
@@ -127,6 +178,9 @@ starry_build() {
         cd "${STARRY_SRC_DIR}"
         "${build_cmd[@]}"
     )
+    if [[ -n "${STARRY_LOG}" ]]; then
+        rm -f -- "${STARRY_SRC_DIR}/.tgosimages-starry-$(basename -- "${config_path}")"
+    fi
 
     artifact_path=""
     for artifact_candidate in \

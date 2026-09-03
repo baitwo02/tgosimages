@@ -29,6 +29,7 @@ usage() {
     printf '  arceos                            Build only the ArceOS system\n'
     printf '  starry                            Build only the StarryOS guest image\n'
     printf '  zephyr                            Build only the Zephyr guest image\n'
+    printf '  ivc                               Build AXIVC Starry/Zephyr demo and benchmark payloads\n'
     printf '  freertos                          Build only the FreeRTOS guest image\n'
     printf '  help, -h, --help                  Display this help information\n'
     printf '  clean                             Clean build output artifacts\n'
@@ -37,8 +38,10 @@ usage() {
     printf '  Optional, all options will be directly passed to the build system of OS\n'
     printf '\n'
     printf 'Examples:\n'
+    printf '  scripts/orangepi.sh               # Build everything\n'
     printf '  scripts/orangepi.sh all           # Build everything\n'
     printf '  scripts/orangepi.sh linux         # Build Linux with U-Boot\n'
+    printf '  scripts/orangepi.sh ivc           # Build AXIVC demo/benchmark payloads\n'
 }
 
 build_uboot() {
@@ -181,6 +184,25 @@ freertos() {
     fi
 }
 
+ivc() {
+    info "Building AXIVC Starry/Zephyr demo and benchmark payloads"
+    bash "${SCRIPT_DIR}/../apps/ivc-rk3588.sh" "$@"
+}
+
+all() {
+    local status=0
+
+    if run_parallel_functions "all" linux arceos starry zephyr freertos -- "$@"; then
+        rootfs_inject_guest_stage "${PLATFORM_ROOTFS_DIR}/orangepi-5-plus.img" "${PLATFORM_IMAGES_DIR}" || status=1
+    else
+        status=1
+        warn "Some Orange Pi platform targets failed; continuing with AXIVC payload build"
+    fi
+
+    ivc "$@" || status=1
+    return "${status}"
+}
+
 uboot() {
     if [[ "$@" != *"clean"* ]]; then
         info "Building U-Boot..."
@@ -194,14 +216,18 @@ uboot() {
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     cmd="${1:-}"
+    if [[ -z "${cmd}" ]]; then
+        cmd="all"
+    else
+        shift
+    fi
     if [[ "${cmd}" =~ ^(all|clean)$ ]]; then
         LOG_CREATE_DEFAULT_FILE="${LOG_CREATE_DEFAULT_FILE:-0}"
     fi
     source "${SCRIPT_DIR}/../lib/utils.sh"
     source "${SCRIPT_DIR}/../lib/rootfs.sh"
-    shift || true
     case "$cmd" in
-        ""|-h|--help|help)
+        -h|--help|help)
             usage
             exit 0
             ;;
@@ -223,8 +249,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         freertos)
             freertos "$@"
             ;;
+        ivc)
+            ivc "$@"
+            ;;
         all)
-            run_parallel_functions "all" linux arceos starry zephyr freertos -- "$@"
+            all "$@"
             ;;
         clean)
             run_parallel_functions "clean" linux arceos starry zephyr freertos -- clean
@@ -233,7 +262,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             die "Unknown command: $cmd" >&2
             ;;
     esac
-    if [[ "$cmd" != "clean" && "$cmd" != "uboot" ]]; then
+    if [[ "$cmd" != "clean" && "$cmd" != "uboot" && "$cmd" != "ivc" && "$cmd" != "all" ]]; then
         rootfs_inject_guest_stage "${PLATFORM_ROOTFS_DIR}/orangepi-5-plus.img" "${PLATFORM_IMAGES_DIR}"
     fi
 fi
