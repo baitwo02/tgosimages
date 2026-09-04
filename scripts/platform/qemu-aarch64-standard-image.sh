@@ -82,9 +82,11 @@ parse_args() {
 
 require_tools() {
     local tool
-    for tool in cmp curl debugfs e2fsck file git make sha256sum tar xz; do
+    for tool in cmp curl debugfs e2fsck file git make pkg-config sha256sum tar xz; do
         command -v "${tool}" >/dev/null 2>&1 || die "Missing required build tool: ${tool}"
     done
+    pkg-config --exists libcrypto \
+        || die "OpenSSL libcrypto development files are required for the Linux host tools"
     command -v "${AARCH64_CROSS_COMPILE}gcc" >/dev/null 2>&1 \
         || die "Missing kernel compiler: ${AARCH64_CROSS_COMPILE}gcc"
     command -v "${AARCH64_CROSS_COMPILE}readelf" >/dev/null 2>&1 \
