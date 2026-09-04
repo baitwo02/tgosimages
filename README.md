@@ -196,6 +196,22 @@ scripts/rootfs/debian.sh riscv64 --debian trixie --out_dir IMAGES/rootfs
 scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 ```
 
+### Reproducible AArch64 AxVisor image pair
+
+Build the standard-name QEMU kernel and Alpine rootfs pair without cloning
+TGOSKits:
+
+```bash
+./build.sh platform qemu-aarch64 standard-image
+```
+
+The builder pins the base v0.0.12 archives, Linux commit, and axvisor-tools
+Message V1 commit. It publishes `release/qemu-aarch64.tar.xz` and
+`release/rootfs-aarch64-alpine.img.tar.xz`. The rootfs contains `pciutils`,
+`/guest/linux/linux-qemu`, and the IVC demos, `axvisor.ko`, `uio.ko`, and
+manifest under `/opt/axvisor/ivc/`. The kernel in both archives is identical,
+and both modules are built from that kernel tree.
+
 ## Rootfs Notes
 
 ### BusyBox

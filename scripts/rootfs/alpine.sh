@@ -701,6 +701,10 @@ alpine_install_default_packages() {
     local docker_dns_servers=()
     local docker_dns_args=()
     local dns_server
+    local packages=("${ALPINE_DEFAULT_PACKAGES[@]}")
+    if [[ "${ALPINE_ARCH}" == "aarch64" ]]; then
+        packages+=(pciutils)
+    fi
     local apk_args=(
         --root "${rootfs_dir}"
         --arch "${ALPINE_ARCH}"
@@ -710,14 +714,14 @@ alpine_install_default_packages() {
         --update-cache
         --no-scripts
         add
-        "${ALPINE_DEFAULT_PACKAGES[@]}"
+        "${packages[@]}"
     )
 
     if [[ -n "${ALPINE_DOCKER_DNS}" ]]; then
         IFS=',' read -r -a docker_dns_servers <<< "${ALPINE_DOCKER_DNS}"
     fi
 
-    info "Installing default Alpine packages: ${ALPINE_DEFAULT_PACKAGES[*]}"
+    info "Installing default Alpine packages: ${packages[*]}"
     if command -v apk >/dev/null 2>&1; then
         cp -f /etc/resolv.conf "${rootfs_dir}/etc/resolv.conf"
         apk "${apk_args[@]}"
@@ -756,7 +760,7 @@ alpine_install_default_packages() {
                 --no-cache \
                 --update-cache \
                 --no-scripts \
-                add ${ALPINE_DEFAULT_PACKAGES[*]}
+                add ${packages[*]}
             chown -R ${host_uid}:${host_gid} /rootfs
         "
 }

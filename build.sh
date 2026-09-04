@@ -247,7 +247,9 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                         qemu_cmd="${target#qemu-}"
                     fi
                     export QEMU_ARCH="${qemu_cmd}"
-                    if [[ "$qemu_cmd" != "all" ]] && ! has_rootfs_override "${qemu_args[@]}"; then
+                    if [[ "$qemu_cmd" != "all" \
+                        && "${qemu_args[0]:-}" != "standard-image" \
+                        ]] && ! has_rootfs_override "${qemu_args[@]}"; then
                         if [[ "$qemu_cmd" == "loongarch64" ]]; then
                             qemu_args+=(--rootfs "busybox,alpine")
                         else

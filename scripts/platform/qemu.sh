@@ -48,6 +48,7 @@ usage() {
     printf '\n'
     printf 'OS Targets:\n'
     printf '  linux                             Build the Linux OS\n'
+    printf '  standard-image                    Build the matched standard AArch64 kernel/rootfs pair\n'
     printf '  arceos                            Build the ArceOS OS\n'
     printf '  zephyr                            Build the Zephyr guest image (aarch64 only)\n'
     printf '  freertos                          Build the FreeRTOS guest image (aarch64 only)\n'
@@ -593,6 +594,11 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             fi
             OS="$1"
             shift 1 || true
+            if [[ "${OS}" == "standard-image" ]]; then
+                [[ "${ARCH}" == "aarch64" ]] \
+                    || die "standard-image is supported only for qemu aarch64"
+                exec "${ROOT_DIR}/scripts/platform/qemu-aarch64-standard-image.sh" "$@"
+            fi
             qemu_rootfs_parse_args "$@"
             if qemu_has_help_arg "${BUILD_ARGS[@]}"; then
                 QEMU_ARCH="${ARCH}" usage
@@ -635,7 +641,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
                     qemu_rootfs_clean_outputs
                     ;;
                 *)
-                    die "Unknown os: ${OS} (supported: linux, arceos, zephyr, freertos, all)"
+                    die "Unknown os: ${OS} (supported: linux, standard-image, arceos, zephyr, freertos, all)"
                     ;;
             esac
             ;;

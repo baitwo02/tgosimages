@@ -200,6 +200,22 @@ scripts/rootfs/debian.sh riscv64 --debian trixie --out_dir IMAGES/rootfs
 scripts/rootfs/debian.sh loongarch64 --debian unstable --out_dir IMAGES/rootfs
 ```
 
+### 可复现的 AArch64 AxVisor 标准镜像对
+
+以下命令不克隆 TGOSKits，直接构建标准名称的 QEMU kernel 与 Alpine
+rootfs 镜像对：
+
+```bash
+./build.sh platform qemu-aarch64 standard-image
+```
+
+构建器固定 v0.0.12 基础归档、Linux commit 和 axvisor-tools Message V1
+commit，输出 `release/qemu-aarch64.tar.xz` 与
+`release/rootfs-aarch64-alpine.img.tar.xz`。rootfs 包含 `pciutils`、
+`/guest/linux/linux-qemu`，以及 `/opt/axvisor/ivc/` 下的 IVC demos、
+`axvisor.ko`、`uio.ko` 和 manifest。两个归档中的 kernel 完全相同，
+两个模块也由同一个 kernel tree 构建。
+
 ## Rootfs 说明
 
 ### BusyBox
