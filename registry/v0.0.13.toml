@@ -1,0 +1,20 @@
+# Matched standard AArch64 image pair with IVC Message V1, pciutils, and UIO.
+# Always consume both entries from this registry version together.
+
+[[images]]
+name = "qemu-aarch64"
+version = "0.0.13"
+description = "QEMU aarch64 guest bundle with the kernel matched to the IVC and UIO modules"
+sha256 = "3849a6d2b68e6112772289619e6f529c37a1dd4311101d87d0f5af3811167ebb"
+arch = "aarch64"
+url = "https://github.com/baitwo02/tgosimages/releases/download/v0.0.13/qemu-aarch64.tar.xz"
+released_at = "2026-09-04T09:10:26Z"
+
+[[images]]
+name = "rootfs-aarch64-alpine.img"
+version = "0.0.13"
+description = "Alpine aarch64 rootfs with IVC Message V1, pciutils, and kernel-matched UIO"
+sha256 = "5d8cfdfd5e186b9a2bbf97cdb611e763902c06b39d886d9f59d3e2ebe52c3c45"
+arch = "aarch64"
+url = "https://github.com/baitwo02/tgosimages/releases/download/v0.0.13/rootfs-aarch64-alpine.img.tar.xz"
+released_at = "2026-09-04T09:10:26Z"
