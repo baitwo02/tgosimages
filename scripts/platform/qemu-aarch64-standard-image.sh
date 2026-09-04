@@ -12,6 +12,8 @@ source "${SCRIPT_DIR}/../lib/utils.sh"
 source "${SCRIPT_DIR}/../lib/rootfs.sh"
 # Sourced libraries use SCRIPT_DIR internally; restore this script's directory.
 SCRIPT_DIR="${STANDARD_SCRIPT_DIR}"
+# apply_patches redirects command output through this variable.
+LOG_FILE="${LOG_FILE:-/dev/null}"
 
 IMAGE_VERSION="${IMAGE_VERSION:-0.0.13}"
 LINUX_REPO_URL="${LINUX_REPO_URL:-https://github.com/torvalds/linux.git}"
