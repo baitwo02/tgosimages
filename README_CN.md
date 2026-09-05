@@ -213,8 +213,29 @@ rootfs 镜像对：
 commit，输出 `release/qemu-aarch64.tar.xz` 与
 `release/rootfs-aarch64-alpine.img.tar.xz`。rootfs 包含 `pciutils`、
 `/guest/linux/linux-qemu`，以及 `/opt/axvisor/ivc/` 下的 IVC demos、
-`axvisor.ko`、`uio.ko` 和 manifest。两个归档中的 kernel 完全相同，
-两个模块也由同一个 kernel tree 构建。
+`axvisor.ko`、`uio.ko`、`uio_ivshmem.ko` 和 manifest。
+两个归档中的 kernel 完全相同，三个模块也由同一个 kernel tree 构建。
+
+默认镜像版本为 `0.0.14`，不修改已发布的 `v0.0.13` 产物。AxVisor 专用的
+ivshmem 驱动源码及来源说明保存在
+[`modules/uio_ivshmem`](modules/uio_ivshmem/README.md)，构建时无需拉取
+TGOSKits。它要求 MSI-X，不能与 IVC 驱动 `axvisor.ko` 互相替代。
+现有 manifest 新增该模块的二进制 SHA-256、源码 SHA-256 和 vermagic。
+模块路径为：
+
+```text
+/opt/axvisor/ivc/lib/modules/uio.ko
+/opt/axvisor/ivc/lib/modules/uio_ivshmem.ko
+/opt/axvisor/ivc/lib/modules/axvisor.ko
+```
+
+ivshmem suite 仍需从 rootfs 提取 `uio.ko` 和 `uio_ivshmem.ko`，放入测试
+initramfs；仅切换镜像 registry 不会自动完成这一步。
+可独立校验构建后的镜像对（需要 Python 3.11+、debugfs、readelf）：
+
+```bash
+python3 scripts/tests/standard-aarch64-content.py
+```
 
 ## Rootfs 说明
 
@@ -365,4 +386,6 @@ python3 http_server.py stop
 
 ## 许可证
 
-本项目基于 MIT License，详见 [LICENSE](LICENSE)。
+构建工具基于 MIT License，详见 [LICENSE](LICENSE)。
+纳入的 `modules/uio_ivshmem` 驱动使用 GPL-2.0-only，详见其
+[COPYING](modules/uio_ivshmem/COPYING)。

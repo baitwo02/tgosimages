@@ -15,7 +15,7 @@ SCRIPT_DIR="${STANDARD_SCRIPT_DIR}"
 # apply_patches redirects command output through this variable.
 LOG_FILE="${LOG_FILE:-/dev/null}"
 
-IMAGE_VERSION="${IMAGE_VERSION:-0.0.13}"
+IMAGE_VERSION="${IMAGE_VERSION:-0.0.14}"
 LINUX_REPO_URL="${LINUX_REPO_URL:-https://github.com/torvalds/linux.git}"
 LINUX_REF="${LINUX_REF:-74fe02ce122a6103f207d29fafc8b3a53de6abaf}"
 LINUX_SRC_DIR="${LINUX_SRC_DIR:-${BUILD_DIR}/standard-aarch64/linux}"
@@ -53,8 +53,9 @@ Options:
   -h, --help                    Display this help
 
 The standard rootfs receives pciutils, Linux IVC Message V1 demos/driver,
-uio.ko, a kernel copy, and /opt/axvisor/ivc/manifest.toml. The matched kernel
-also replaces linux/linux-qemu in the standard qemu-aarch64 bundle.
+uio.ko, the AxVisor uio_ivshmem.ko driver, a kernel copy, and
+/opt/axvisor/ivc/manifest.toml. The matched kernel also replaces
+linux/linux-qemu in the standard qemu-aarch64 bundle.
 USAGE
 }
 
@@ -177,6 +178,11 @@ prepare_linux() {
     fi
 
     KERNEL_PATH="${LINUX_SRC_DIR}/arch/arm64/boot/Image"
+    # Generate UIO's exported-symbol table for the external ivshmem driver.
+    # vmlinux.symvers alone does not contain symbols exported by uio.ko.
+    make -C "${LINUX_SRC_DIR}" \
+        ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= \
+        M=drivers/uio modules
     UIO_PATH="${LINUX_SRC_DIR}/drivers/uio/uio.ko"
     [[ -s "${KERNEL_PATH}" ]] || die "Linux kernel was not produced: ${KERNEL_PATH}"
     [[ -s "${UIO_PATH}" ]] || die "uio.ko was not produced: ${UIO_PATH}"
@@ -212,6 +218,25 @@ build_ivc() {
         || die "axvisor.ko vermagic does not match ${KERNEL_RELEASE}: ${AXVISOR_VERMAGIC}"
 }
 
+build_uio_ivshmem() {
+    local source_dir="${ROOT_DIR}/modules/uio_ivshmem"
+    local module_dir="${WORK_DIR}/uio_ivshmem"
+    rm -rf "${module_dir}"
+    mkdir -p "${module_dir}"
+    cp "${source_dir}/Makefile" "${source_dir}/uio_ivshmem.c" "${module_dir}/"
+    make -C "${LINUX_SRC_DIR}" \
+        ARCH=arm64 CROSS_COMPILE="${AARCH64_CROSS_COMPILE}" LOCALVERSION= \
+        M="${module_dir}" \
+        KBUILD_EXTRA_SYMBOLS="${LINUX_SRC_DIR}/drivers/uio/Module.symvers" modules
+
+    UIO_IVSHMEM_PATH="${module_dir}/uio_ivshmem.ko"
+    [[ -s "${UIO_IVSHMEM_PATH}" ]] || die "uio_ivshmem.ko was not produced"
+    UIO_IVSHMEM_VERMAGIC="$(module_vermagic "${UIO_IVSHMEM_PATH}")"
+    [[ "${UIO_IVSHMEM_VERMAGIC}" == "${UIO_VERMAGIC}" ]] \
+        || die "uio_ivshmem.ko vermagic does not match uio.ko: ${UIO_IVSHMEM_VERMAGIC}"
+    UIO_IVSHMEM_SOURCE_SHA256="$(sha256sum "${source_dir}/uio_ivshmem.c" | awk '{print $1}')"
+}
+
 require_static_aarch64() {
     local path="$1"
     local label="$2"
@@ -229,11 +254,12 @@ module_vermagic() {
 
 write_manifest() {
     local manifest="$1"
-    local builder_commit kernel_sha uio_sha axvisor_sha publish_sha subscribe_sha
+    local builder_commit kernel_sha uio_sha axvisor_sha publish_sha subscribe_sha uio_ivshmem_sha
     builder_commit="$(git -C "${ROOT_DIR}" rev-parse HEAD)"
     kernel_sha="$(sha256sum "${KERNEL_PATH}" | awk '{print $1}')"
     uio_sha="$(sha256sum "${UIO_PATH}" | awk '{print $1}')"
     axvisor_sha="$(sha256sum "${AXVISOR_KO_PATH}" | awk '{print $1}')"
+    uio_ivshmem_sha="$(sha256sum "${UIO_IVSHMEM_PATH}" | awk '{print $1}')"
     publish_sha="$(sha256sum "${IVC_PUBLISH_PATH}" | awk '{print $1}')"
     subscribe_sha="$(sha256sum "${IVC_SUBSCRIBE_PATH}" | awk '{print $1}')"
 
@@ -249,6 +275,9 @@ kernel_sha256 = "${kernel_sha}"
 axvisor_tools_commit = "${AXVISOR_TOOLS_REF}"
 uio_sha256 = "${uio_sha}"
 uio_vermagic = "${UIO_VERMAGIC}"
+uio_ivshmem_sha256 = "${uio_ivshmem_sha}"
+uio_ivshmem_vermagic = "${UIO_IVSHMEM_VERMAGIC}"
+uio_ivshmem_source_sha256 = "${UIO_IVSHMEM_SOURCE_SHA256}"
 axvisor_ko_sha256 = "${axvisor_sha}"
 axvisor_vermagic = "${AXVISOR_VERMAGIC}"
 ivc_publish_sha256 = "${publish_sha}"
@@ -275,6 +304,7 @@ inject_assets() {
     cp -f "${IVC_SUBSCRIBE_PATH}" "${overlay}/opt/axvisor/ivc/bin/ivc-subscribe"
     cp -f "${AXVISOR_KO_PATH}" "${overlay}/opt/axvisor/ivc/lib/modules/axvisor.ko"
     cp -f "${UIO_PATH}" "${overlay}/opt/axvisor/ivc/lib/modules/uio.ko"
+    cp -f "${UIO_IVSHMEM_PATH}" "${overlay}/opt/axvisor/ivc/lib/modules/uio_ivshmem.ko"
     chmod 0755 "${overlay}/opt/axvisor/ivc/bin/ivc-publish" "${overlay}/opt/axvisor/ivc/bin/ivc-subscribe"
     write_manifest "${overlay}/opt/axvisor/ivc/manifest.toml"
     rootfs_inject_overlay_stage "${ROOTFS_IMAGE}" "${overlay}"
@@ -288,6 +318,7 @@ validate_output() {
     mkdir -p "${dump}"
     compare_image_file "${KERNEL_PATH}" /guest/linux/linux-qemu "${dump}/linux-qemu"
     compare_image_file "${UIO_PATH}" /opt/axvisor/ivc/lib/modules/uio.ko "${dump}/uio.ko"
+    compare_image_file "${UIO_IVSHMEM_PATH}" /opt/axvisor/ivc/lib/modules/uio_ivshmem.ko "${dump}/uio_ivshmem.ko"
     compare_image_file "${AXVISOR_KO_PATH}" /opt/axvisor/ivc/lib/modules/axvisor.ko "${dump}/axvisor.ko"
     compare_image_file "${IVC_PUBLISH_PATH}" /opt/axvisor/ivc/bin/ivc-publish "${dump}/ivc-publish"
     compare_image_file "${IVC_SUBSCRIBE_PATH}" /opt/axvisor/ivc/bin/ivc-subscribe "${dump}/ivc-subscribe"
@@ -331,6 +362,7 @@ main() {
     prepare_inputs
     prepare_linux
     build_ivc
+    build_uio_ivshmem
     inject_assets
     validate_output
     package_output

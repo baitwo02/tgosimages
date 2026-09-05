@@ -208,9 +208,30 @@ TGOSKits:
 The builder pins the base v0.0.12 archives, Linux commit, and axvisor-tools
 Message V1 commit. It publishes `release/qemu-aarch64.tar.xz` and
 `release/rootfs-aarch64-alpine.img.tar.xz`. The rootfs contains `pciutils`,
-`/guest/linux/linux-qemu`, and the IVC demos, `axvisor.ko`, `uio.ko`, and
-manifest under `/opt/axvisor/ivc/`. The kernel in both archives is identical,
-and both modules are built from that kernel tree.
+`/guest/linux/linux-qemu`, and the IVC demos, `axvisor.ko`, `uio.ko`,
+`uio_ivshmem.ko`, and manifest under `/opt/axvisor/ivc/`. The kernel in both
+archives is identical, and all three modules are built from that kernel tree.
+
+The default image version is `0.0.14`; published `v0.0.13` assets are not
+changed. The AxVisor-specific ivshmem driver is vendored with provenance in
+[`modules/uio_ivshmem`](modules/uio_ivshmem/README.md). It requires MSI-X and
+is not interchangeable with the IVC driver `axvisor.ko`. Its binary hash,
+source hash, and vermagic are recorded in the existing manifest. The module
+paths are:
+
+```text
+/opt/axvisor/ivc/lib/modules/uio.ko
+/opt/axvisor/ivc/lib/modules/uio_ivshmem.ko
+/opt/axvisor/ivc/lib/modules/axvisor.ko
+```
+
+The ivshmem suite must extract `uio.ko` and `uio_ivshmem.ko` from the rootfs
+into its test initramfs; changing the image registry alone does not do this.
+To check the built image pair independently (Python 3.11+, debugfs, readelf):
+
+```bash
+python3 scripts/tests/standard-aarch64-content.py
+```
 
 ## Rootfs Notes
 
@@ -368,4 +389,6 @@ Before sending a pull request, please keep script style consistent and document 
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+Build tooling is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+The vendored `modules/uio_ivshmem` driver is GPL-2.0-only; see its
+[COPYING](modules/uio_ivshmem/COPYING).
